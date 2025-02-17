@@ -5,13 +5,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
 
-ffmpeg.setFfmpegPath(
-  'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe',
-);
+// Set FFmpeg path dynamically based on the OS
+const ffmpegPath =
+  process.platform === 'win32'
+    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe' // Windows path
+    : '/usr/bin/ffmpeg'; // Default Linux path on Render
 
-ffmpeg.setFfprobePath(
-  'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe',
-);
+const ffprobePath =
+  process.platform === 'win32'
+    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe'
+    : '/usr/bin/ffprobe'; // Default Linux path on Render
+
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
 
 @Controller('download')
 export class DownloadController {
@@ -42,6 +48,7 @@ export class DownloadController {
       await exec(url, {
         output: originalVideoPath,
         format: 'best',
+        exec: '/usr/local/bin/yt-dlp',
       });
 
       console.log('Checking if download was successful...');
