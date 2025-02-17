@@ -5,18 +5,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
 
-// Set FFmpeg path dynamically based on the OS
-ffmpeg.setFfmpegPath(
-  process.platform === 'win32'
-    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe' // Windows path
-    : '/usr/bin/ffmpeg', // Default Linux path on Render
-);
+// Define absolute paths for binaries
+const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
+const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
+const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
+const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
 
-ffmpeg.setFfprobePath(
-  process.platform === 'win32'
-    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffprobe.exe'
-    : '/usr/bin/ffprobe', // Default Linux path on Render
-);
+ffmpeg.setFfmpegPath(FFMPEG_PATH);
+ffmpeg.setFfprobePath(FFPROBE_PATH);
 
 @Controller('download')
 export class DownloadController {
@@ -42,8 +38,9 @@ export class DownloadController {
       );
 
       console.log('Downloading video...');
-      const ytDlpCommand = `yt-dlp -o "${originalVideoPath}" -f best "${url}"`;
+      const ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f best "${url}"`;
       console.log('Executing command:', ytDlpCommand);
+
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
           if (error) {
@@ -61,17 +58,16 @@ export class DownloadController {
       }
       console.log('Download confirmed, proceeding with conversion...');
 
-      // Convert video to a widely supported format
       await new Promise<void>((resolve, reject) => {
         ffmpeg(originalVideoPath)
-          .inputOptions('-y') // Overwrite existing file
+          .inputOptions('-y')
           .outputOptions([
             '-y',
             '-c:v libx264',
             '-preset fast',
             '-c:a aac',
             '-b:a 128k',
-          ]) // Speed up conversion
+          ])
           .output(convertedVideoPath)
           .videoCodec('libx264')
           .audioCodec('aac')
