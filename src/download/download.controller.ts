@@ -1,23 +1,22 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { exec } from 'yt-dlp-exec';
+import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
 
 // Set FFmpeg path dynamically based on the OS
-const ffmpegPath =
+ffmpeg.setFfmpegPath(
   process.platform === 'win32'
     ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe' // Windows path
-    : '/usr/bin/ffmpeg'; // Default Linux path on Render
+    : '/usr/bin/ffmpeg', // Default Linux path on Render
+);
 
-const ffprobePath =
+ffmpeg.setFfprobePath(
   process.platform === 'win32'
-    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffmpeg.exe'
-    : '/usr/bin/ffprobe'; // Default Linux path on Render
-
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
+    ? 'C:\\ffmpeg\\ffmpeg-master-latest-win64-gpl-shared\\bin\\ffprobe.exe'
+    : '/usr/bin/ffprobe', // Default Linux path on Render
+);
 
 @Controller('download')
 export class DownloadController {
@@ -45,10 +44,15 @@ export class DownloadController {
       console.log('Downloading video...');
       const ytDlpCommand = `yt-dlp -o "${originalVideoPath}" -f best "${url}"`;
       console.log('Executing command:', ytDlpCommand);
-      await exec(url, {
-        output: originalVideoPath,
-        format: 'best',
-        exec: '/usr/local/bin/yt-dlp',
+      await new Promise<void>((resolve, reject) => {
+        exec(ytDlpCommand, (error, stdout, stderr) => {
+          if (error) {
+            console.error('yt-dlp error:', error.message);
+            return reject(error);
+          }
+          console.log(stdout || stderr);
+          resolve();
+        });
       });
 
       console.log('Checking if download was successful...');
@@ -96,12 +100,10 @@ export class DownloadController {
         setTimeout(() => {
           try {
             if (fs.existsSync(originalVideoPath)) {
-              fs.accessSync(originalVideoPath, fs.constants.W_OK);
               fs.unlinkSync(originalVideoPath);
               console.log('Deleted:', originalVideoPath);
             }
             if (fs.existsSync(convertedVideoPath)) {
-              fs.accessSync(convertedVideoPath, fs.constants.W_OK);
               fs.unlinkSync(convertedVideoPath);
               console.log('Deleted:', convertedVideoPath);
             }
