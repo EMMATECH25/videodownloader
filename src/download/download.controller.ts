@@ -59,14 +59,15 @@ export class DownloadController {
       console.log('Download confirmed, proceeding with conversion...');
 
       await new Promise<void>((resolve, reject) => {
+        ffmpeg(originalVideoPath).inputOptions('-y');
         ffmpeg(originalVideoPath)
-          .inputOptions('-y')
           .outputOptions([
             '-y',
             '-c:v libx264',
-            '-preset fast',
+            '-preset veryfast', // Use a faster preset
+            '-crf 28', // Lower quality to reduce file size
             '-c:a aac',
-            '-b:a 128k',
+            '-b:a 96k', // Lower audio bitrate
           ])
           .output(convertedVideoPath)
           .videoCodec('libx264')
