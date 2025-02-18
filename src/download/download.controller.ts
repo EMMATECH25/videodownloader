@@ -1,15 +1,25 @@
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Res,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 // Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
 const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
 const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
 const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
+const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 ffmpeg.setFfprobePath(FFPROBE_PATH);
@@ -28,51 +38,49 @@ export class DownloadController {
         fs.mkdirSync(outputPath, { recursive: true });
       }
 
-      const originalVideoPath: string = path.join(
-        outputPath,
-        'original_video.mp4',
-      );
-      const convertedVideoPath: string = path.join(
-        outputPath,
-        'converted_video.mp4',
-      );
+      const originalVideoPath = path.join(outputPath, 'original_video.mp4');
+      const convertedVideoPath = path.join(outputPath, 'converted_video.mp4');
 
       console.log('Downloading video...');
-      const ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f best "${url}"`;
+      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
+
+      if (fs.existsSync(COOKIES_PATH)) {
+        console.log('Using cookies file for authentication:', COOKIES_PATH);
+        ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
+      } else {
+        console.warn('Warning: cookies.txt not found, downloading may fail.');
+      }
+
       console.log('Executing command:', ytDlpCommand);
 
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
           if (error) {
-            console.error('yt-dlp error:', stderr || error.message);
+            console.error('yt-dlp error:', error.message);
             return reject(error);
           }
-          console.log(stdout);
+          console.log(stdout || stderr);
           resolve();
         });
       });
 
-      console.log('Checking if download was successful...');
       if (!fs.existsSync(originalVideoPath)) {
         throw new Error('Download failed: File was not created.');
       }
-      console.log('Download confirmed, proceeding with conversion...');
+
+      console.log('Download complete, proceeding with conversion...');
 
       await new Promise<void>((resolve, reject) => {
         ffmpeg(originalVideoPath)
           .outputOptions([
             '-y',
             '-c:v libx264',
-            '-preset ultrafast', // Reduces CPU usage
-            '-crf 30', // Reduces output file size
+            '-preset veryfast',
+            '-crf 28',
             '-c:a aac',
-            '-b:a 96k', // Lower audio bitrate
-            '-threads 2', // Limit CPU threads to avoid SIGKILL
-            '-movflags +faststart', // Optimizes for web streaming
+            '-b:a 96k',
           ])
           .output(convertedVideoPath)
-          .videoCodec('libx264')
-          .audioCodec('aac')
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
           .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
@@ -92,34 +100,48 @@ export class DownloadController {
           console.error('Download error:', err);
           res.status(500).json({ error: 'Error downloading the video' });
         }
-        console.log(
-          'Download response sent. Cleaning up files in 5 seconds...',
-        );
+
         setTimeout(() => {
           try {
-            if (fs.existsSync(originalVideoPath)) {
+            if (fs.existsSync(originalVideoPath))
               fs.unlinkSync(originalVideoPath);
-              console.log('Deleted:', originalVideoPath);
-            }
-            if (fs.existsSync(convertedVideoPath)) {
+            if (fs.existsSync(convertedVideoPath))
               fs.unlinkSync(convertedVideoPath);
-              console.log('Deleted:', convertedVideoPath);
-            }
           } catch (cleanupError) {
             console.error('Error during file cleanup:', cleanupError);
           }
         }, 5000);
       });
     } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error('Error:', error.message);
-      } else {
-        console.error('Unexpected error:', error);
-      }
-
+      console.error('Error:', error instanceof Error ? error.message : error);
       return res
         .status(500)
         .json({ error: 'Failed to download and convert video' });
+    }
+  }
+}
+
+@Controller('upload')
+export class UploadController {
+  @Post('cookies')
+  @UseInterceptors(FileInterceptor('file'))
+  uploadCookies(@UploadedFile() file?: Express.Multer.File) {
+    if (!file || !file.buffer) {
+      return { error: 'No file uploaded or file buffer is empty' };
+    }
+
+    const isTextFile =
+      file.mimetype === 'text/plain' || file.originalname.endsWith('.txt');
+    if (!isTextFile) {
+      return { error: 'Invalid file format. Please upload a .txt file' };
+    }
+
+    try {
+      fs.writeFileSync(COOKIES_PATH, file.buffer);
+      return { message: 'Cookies uploaded successfully' };
+    } catch (error) {
+      console.error('File write error:', error);
+      return { error: 'Failed to save cookies file' };
     }
   }
 }
