@@ -44,10 +44,10 @@ export class DownloadController {
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
           if (error) {
-            console.error('yt-dlp error:', error.message);
+            console.error('yt-dlp error:', stderr || error.message);
             return reject(error);
           }
-          console.log(stdout || stderr);
+          console.log(stdout);
           resolve();
         });
       });
@@ -59,15 +59,16 @@ export class DownloadController {
       console.log('Download confirmed, proceeding with conversion...');
 
       await new Promise<void>((resolve, reject) => {
-        ffmpeg(originalVideoPath).inputOptions('-y');
         ffmpeg(originalVideoPath)
           .outputOptions([
             '-y',
             '-c:v libx264',
-            '-preset veryfast', // Use a faster preset
-            '-crf 28', // Lower quality to reduce file size
+            '-preset ultrafast', // Reduces CPU usage
+            '-crf 30', // Reduces output file size
             '-c:a aac',
             '-b:a 96k', // Lower audio bitrate
+            '-threads 2', // Limit CPU threads to avoid SIGKILL
+            '-movflags +faststart', // Optimizes for web streaming
           ])
           .output(convertedVideoPath)
           .videoCodec('libx264')
