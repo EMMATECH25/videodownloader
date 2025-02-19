@@ -1,25 +1,19 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Res,
-  Post,
-  UploadedFile,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
-import { FileInterceptor } from '@nestjs/platform-express';
 
 // Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
-const YT_DLP_PATH = '/opt/render/project/src/bin/yt-dlp';
+const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
 const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
 const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
+
+// Install log file path
+const INSTALL_LOG_PATH = path.join(BIN_PATH, 'install_log.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 ffmpeg.setFfprobePath(FFPROBE_PATH);
@@ -119,29 +113,15 @@ export class DownloadController {
         .json({ error: 'Failed to download and convert video' });
     }
   }
-}
 
-@Controller('upload')
-export class UploadController {
-  @Post('cookies')
-  @UseInterceptors(FileInterceptor('file'))
-  uploadCookies(@UploadedFile() file?: Express.Multer.File) {
-    if (!file || !file.buffer) {
-      return { error: 'No file uploaded or file buffer is empty' };
-    }
-
-    const isTextFile =
-      file.mimetype === 'text/plain' || file.originalname.endsWith('.txt');
-    if (!isTextFile) {
-      return { error: 'Invalid file format. Please upload a .txt file' };
-    }
-
-    try {
-      fs.writeFileSync(COOKIES_PATH, file.buffer);
-      return { message: 'Cookies uploaded successfully' };
-    } catch (error) {
-      console.error('File write error:', error);
-      return { error: 'Failed to save cookies file' };
+  // New endpoint to read the install log
+  @Get('install-log')
+  getInstallLog(@Res() res: Response) {
+    if (fs.existsSync(INSTALL_LOG_PATH)) {
+      const logContent = fs.readFileSync(INSTALL_LOG_PATH, 'utf8');
+      return res.send(`<pre>${logContent}</pre>`);
+    } else {
+      return res.status(404).json({ error: 'Log file not found' });
     }
   }
 }
