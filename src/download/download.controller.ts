@@ -36,7 +36,8 @@ export class DownloadController {
       const convertedVideoPath = path.join(outputPath, 'converted_video.mp4');
 
       console.log('Downloading video...');
-      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
+      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
+
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
