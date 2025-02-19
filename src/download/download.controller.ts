@@ -69,10 +69,9 @@ export class DownloadController {
           .outputOptions([
             '-y',
             '-c:v libx264',
-            '-preset veryfast',
-            '-crf 28',
-            '-c:a aac',
-            '-b:a 96k',
+            '-preset ultrafast', // Faster encoding, less CPU usage
+            '-crf 30', // Slightly lower quality but reduces load
+            '-c:a copy', // Avoids unnecessary audio re-encoding
           ])
           .output(convertedVideoPath)
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
