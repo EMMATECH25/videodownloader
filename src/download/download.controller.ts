@@ -16,7 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 
 // Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
-const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
+const YT_DLP_PATH = '/opt/render/project/src/bin/yt-dlp';
 const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
 const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
