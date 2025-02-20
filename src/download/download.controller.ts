@@ -24,8 +24,8 @@ export class DownloadController {
   async downloadVideo(
     @Query('url') url: string,
     @Res() res: Response,
-    @Query('start') startTime?: string,
-    @Query('end') endTime?: string,
+    @Query('start') start?: string,
+    @Query('end') end?: string,
   ) {
     if (!url) {
       return res.status(400).json({ error: 'Please provide a video URL!' });
@@ -67,56 +67,55 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
-      console.log('Download complete, proceeding with trimming...');
+      // Check if trimming is needed
+      if (start && end) {
+        console.log(`Trimming video from ${start} to ${end}...`);
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(originalVideoPath)
+            .setStartTime(start)
+            .setDuration(parseFloat(end) - parseFloat(start))
+            .outputOptions([
+              '-y',
+              '-c:v libx264',
+              '-preset ultrafast',
+              '-crf 30',
+              '-c:a copy',
+            ])
+            .output(trimmedVideoPath)
+            .on('start', (cmd) => console.log('FFmpeg command:', cmd))
+            .on('progress', (progress) => console.log('Progress:', progress))
+            .on('end', () => {
+              console.log('Trimming complete.');
+              resolve();
+            })
+            .on('error', (err: Error) => {
+              console.error('Trimming error:', err.message);
+              reject(err);
+            })
+            .run();
+        });
+        console.log('Sending trimmed video...');
+        res.download(trimmedVideoPath, 'trimmed_video.mp4');
+      } else {
+        console.log('Sending full video...');
+        res.download(originalVideoPath, 'downloaded_video.mp4');
+      }
 
-      await new Promise<void>((resolve, reject) => {
-        let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions(['-y']);
-
-        if (startTime && endTime) {
-          ffmpegCommand = ffmpegCommand.outputOptions([
-            `-ss ${startTime}`,
-            `-to ${endTime}`,
-          ]);
+      // Cleanup files after sending response
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(originalVideoPath))
+            fs.unlinkSync(originalVideoPath);
+          if (fs.existsSync(trimmedVideoPath)) fs.unlinkSync(trimmedVideoPath);
+        } catch (cleanupError) {
+          console.error('Error during file cleanup:', cleanupError);
         }
-
-        ffmpegCommand
-          .output(trimmedVideoPath)
-          .on('start', (cmd) => console.log('FFmpeg command:', cmd))
-          .on('progress', (progress) => console.log('Progress:', progress))
-          .on('end', () => {
-            console.log('Trimming complete.');
-            resolve();
-          })
-          .on('error', (err: Error) => {
-            console.error('Trimming error:', err.message);
-            reject(err);
-          })
-          .run();
-      });
-
-      console.log('Sending trimmed video...');
-      res.download(trimmedVideoPath, 'downloaded_video.mp4', (err) => {
-        if (err) {
-          console.error('Download error:', err);
-          res.status(500).json({ error: 'Error downloading the video' });
-        }
-
-        setTimeout(() => {
-          try {
-            if (fs.existsSync(originalVideoPath))
-              fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(trimmedVideoPath))
-              fs.unlinkSync(trimmedVideoPath);
-          } catch (cleanupError) {
-            console.error('Error during file cleanup:', cleanupError);
-          }
-        }, 5000);
-      });
+      }, 5000);
     } catch (error: unknown) {
       console.error('Error:', error instanceof Error ? error.message : error);
       return res
         .status(500)
-        .json({ error: 'Failed to download and trim video' });
+        .json({ error: 'Failed to download and process video' });
     }
   }
 
