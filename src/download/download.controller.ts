@@ -38,7 +38,7 @@ export class DownloadController {
       }
 
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
-      const trimmedVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+      const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
       console.log('Downloading video...');
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -67,50 +67,58 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
-      // Check if trimming is needed
-      if (start && end) {
-        console.log(`Trimming video from ${start} to ${end}...`);
-        await new Promise<void>((resolve, reject) => {
-          ffmpeg(originalVideoPath)
-            .setStartTime(start)
-            .setDuration(parseFloat(end) - parseFloat(start))
-            .outputOptions([
-              '-y',
-              '-c:v libx264',
-              '-preset ultrafast',
-              '-crf 30',
-              '-c:a copy',
-            ])
-            .output(trimmedVideoPath)
-            .on('start', (cmd) => console.log('FFmpeg command:', cmd))
-            .on('progress', (progress) => console.log('Progress:', progress))
-            .on('end', () => {
-              console.log('Trimming complete.');
-              resolve();
-            })
-            .on('error', (err: Error) => {
-              console.error('Trimming error:', err.message);
-              reject(err);
-            })
-            .run();
-        });
-        console.log('Sending trimmed video...');
-        res.download(trimmedVideoPath, 'trimmed_video.mp4');
-      } else {
-        console.log('Sending full video...');
-        res.download(originalVideoPath, 'downloaded_video.mp4');
-      }
+      console.log('Download complete, proceeding with processing...');
 
-      // Cleanup files after sending response
-      setTimeout(() => {
-        try {
-          if (fs.existsSync(originalVideoPath))
-            fs.unlinkSync(originalVideoPath);
-          if (fs.existsSync(trimmedVideoPath)) fs.unlinkSync(trimmedVideoPath);
-        } catch (cleanupError) {
-          console.error('Error during file cleanup:', cleanupError);
+      await new Promise<void>((resolve, reject) => {
+        const ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
+          '-y',
+          '-c:v libx264',
+          '-preset ultrafast',
+          '-crf 30',
+          '-c:a aac',
+          '-b:a 128k',
+        ]);
+
+        if (start && end) {
+          console.log(`Trimming video from ${start} to ${end}`);
+          ffmpegCommand
+            .setStartTime(start)
+            .setDuration(parseFloat(end) - parseFloat(start));
         }
-      }, 5000);
+
+        ffmpegCommand
+          .output(processedVideoPath)
+          .on('start', (cmd) => console.log('FFmpeg command:', cmd))
+          .on('progress', (progress) => console.log('Progress:', progress))
+          .on('end', () => {
+            console.log('Processing complete.');
+            resolve();
+          })
+          .on('error', (err: Error) => {
+            console.error('Processing error:', err.message);
+            reject(err);
+          })
+          .run();
+      });
+
+      console.log('Sending processed video...');
+      res.download(processedVideoPath, 'downloaded_video.mp4', (err) => {
+        if (err) {
+          console.error('Download error:', err);
+          res.status(500).json({ error: 'Error downloading the video' });
+        }
+
+        setTimeout(() => {
+          try {
+            if (fs.existsSync(originalVideoPath))
+              fs.unlinkSync(originalVideoPath);
+            if (fs.existsSync(processedVideoPath))
+              fs.unlinkSync(processedVideoPath);
+          } catch (cleanupError) {
+            console.error('Error during file cleanup:', cleanupError);
+          }
+        }, 5000);
+      });
     } catch (error: unknown) {
       console.error('Error:', error instanceof Error ? error.message : error);
       return res
@@ -119,7 +127,6 @@ export class DownloadController {
     }
   }
 
-  // New endpoint to read the install log
   @Get('install-log')
   getInstallLog(@Res() res: Response) {
     if (fs.existsSync(INSTALL_LOG_PATH)) {
