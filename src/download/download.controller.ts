@@ -21,7 +21,12 @@ ffmpeg.setFfprobePath(FFPROBE_PATH);
 @Controller('download')
 export class DownloadController {
   @Get()
-  async downloadVideo(@Query('url') url: string, @Res() res: Response) {
+  async downloadVideo(
+    @Query('url') url: string,
+    @Res() res: Response,
+    @Query('start') startTime?: string,
+    @Query('end') endTime?: string,
+  ) {
     if (!url) {
       return res.status(400).json({ error: 'Please provide a video URL!' });
     }
@@ -33,7 +38,7 @@ export class DownloadController {
       }
 
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
-      const convertedVideoPath = path.join(outputPath, 'converted_video.mp4');
+      const trimmedVideoPath = path.join(outputPath, 'trimmed_video.mp4');
 
       console.log('Downloading video...');
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -62,33 +67,35 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
-      console.log('Download complete, proceeding with conversion...');
+      console.log('Download complete, proceeding with trimming...');
 
       await new Promise<void>((resolve, reject) => {
-        ffmpeg(originalVideoPath)
-          .outputOptions([
-            '-y',
-            '-c:v libx264',
-            '-preset ultrafast', // Faster encoding, less CPU usage
-            '-crf 30', // Slightly lower quality but reduces load
-            '-c:a copy', // Avoids unnecessary audio re-encoding
-          ])
-          .output(convertedVideoPath)
+        let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions(['-y']);
+
+        if (startTime && endTime) {
+          ffmpegCommand = ffmpegCommand.outputOptions([
+            `-ss ${startTime}`,
+            `-to ${endTime}`,
+          ]);
+        }
+
+        ffmpegCommand
+          .output(trimmedVideoPath)
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
           .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
-            console.log('Conversion complete.');
+            console.log('Trimming complete.');
             resolve();
           })
           .on('error', (err: Error) => {
-            console.error('Conversion error:', err.message);
+            console.error('Trimming error:', err.message);
             reject(err);
           })
           .run();
       });
 
-      console.log('Sending converted video...');
-      res.download(convertedVideoPath, 'downloaded_video.mp4', (err) => {
+      console.log('Sending trimmed video...');
+      res.download(trimmedVideoPath, 'downloaded_video.mp4', (err) => {
         if (err) {
           console.error('Download error:', err);
           res.status(500).json({ error: 'Error downloading the video' });
@@ -98,8 +105,8 @@ export class DownloadController {
           try {
             if (fs.existsSync(originalVideoPath))
               fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(convertedVideoPath))
-              fs.unlinkSync(convertedVideoPath);
+            if (fs.existsSync(trimmedVideoPath))
+              fs.unlinkSync(trimmedVideoPath);
           } catch (cleanupError) {
             console.error('Error during file cleanup:', cleanupError);
           }
@@ -109,7 +116,7 @@ export class DownloadController {
       console.error('Error:', error instanceof Error ? error.message : error);
       return res
         .status(500)
-        .json({ error: 'Failed to download and convert video' });
+        .json({ error: 'Failed to download and trim video' });
     }
   }
 
