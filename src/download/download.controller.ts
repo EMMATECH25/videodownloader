@@ -38,7 +38,7 @@ export class DownloadController {
       }
 
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
-      const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
+      const trimmedVideoPath = path.join(outputPath, 'trimmed_video.mp4');
 
       console.log('Downloading video...');
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -69,6 +69,11 @@ export class DownloadController {
 
       console.log('Download complete, ensuring correct format...');
 
+      const startTime = parseFloat(start || '0');
+      const endTime = parseFloat(end || '0');
+      const isTrimming =
+        !isNaN(startTime) && !isNaN(endTime) && startTime < endTime;
+
       let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
         '-y',
         '-c:v libx264',
@@ -76,32 +81,19 @@ export class DownloadController {
         '-crf 30',
         '-c:a aac',
         '-b:a 128k',
-        '-movflags +faststart', // Ensures MP4 compatibility
+        '-movflags +faststart',
       ]);
 
-      let isTrimming = false;
-      if (start !== undefined && end !== undefined) {
-        const startTime = parseFloat(start);
-        const endTime = parseFloat(end);
-        if (!isNaN(startTime) && !isNaN(endTime) && startTime < endTime) {
-          console.log(`Trimming video from ${startTime} to ${endTime}`);
-          ffmpegCommand = ffmpegCommand
-            .setStartTime(startTime)
-            .setDuration(endTime - startTime);
-          isTrimming = true;
-        } else {
-          console.error('Invalid start or end time provided.');
-          return res.status(400).json({ error: 'Invalid start or end time.' });
-        }
+      if (isTrimming) {
+        console.log(`Trimming video from ${startTime} to ${endTime}`);
+        ffmpegCommand = ffmpegCommand
+          .inputOptions([`-ss ${startTime}`])
+          .outputOptions([`-t ${endTime - startTime}`]);
       }
-
-      const finalVideoPath = isTrimming
-        ? path.join(outputPath, 'trimmed_video.mp4')
-        : processedVideoPath;
 
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
-          .output(finalVideoPath)
+          .output(isTrimming ? trimmedVideoPath : originalVideoPath)
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
           .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
@@ -115,6 +107,8 @@ export class DownloadController {
           .run();
       });
 
+      const finalVideoPath = isTrimming ? trimmedVideoPath : originalVideoPath;
+
       console.log('Sending processed video...');
       res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
         if (err) {
@@ -126,7 +120,8 @@ export class DownloadController {
           try {
             if (fs.existsSync(originalVideoPath))
               fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
+            if (fs.existsSync(trimmedVideoPath))
+              fs.unlinkSync(trimmedVideoPath);
           } catch (cleanupError) {
             console.error('Error during file cleanup:', cleanupError);
           }
