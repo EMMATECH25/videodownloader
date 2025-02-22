@@ -67,56 +67,76 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
-      console.log('Download complete, proceeding with processing...');
+      console.log('Download complete, checking for trimming parameters...');
+
+      // If no trimming is needed, return the full video
+      if (!start || !end) {
+        console.log('No trimming requested, sending full video...');
+        return res.download(
+          originalVideoPath,
+          'downloaded_video.mp4',
+          (err) => {
+            if (err) {
+              console.error('Download error:', err);
+              return res
+                .status(500)
+                .json({ error: 'Error downloading the video' });
+            }
+            setTimeout(() => fs.unlinkSync(originalVideoPath), 5000);
+          },
+        );
+      }
+
+      console.log(`Trimming video from ${start} to ${end}`);
+
+      // Convert start and end to numbers
+      const startTime = parseFloat(start);
+      const endTime = parseFloat(end);
+      if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
+        console.error('Invalid start or end time.');
+        return res.status(400).json({ error: 'Invalid start or end time' });
+      }
 
       await new Promise<void>((resolve, reject) => {
-        const ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
-          '-y',
-          '-c:v libx264',
-          '-preset ultrafast',
-          '-crf 30',
-          '-c:a aac',
-          '-b:a 128k',
-        ]);
-
-        if (start && end) {
-          console.log(`Trimming video from ${start} to ${end}`);
-          ffmpegCommand
-            .setStartTime(start)
-            .setDuration(parseFloat(end) - parseFloat(start));
-        }
-
-        ffmpegCommand
+        ffmpeg(originalVideoPath)
+          .setStartTime(startTime)
+          .setDuration(endTime - startTime)
+          .outputOptions([
+            '-y',
+            '-c:v libx264',
+            '-preset ultrafast',
+            '-crf 30',
+            '-c:a aac',
+            '-b:a 128k',
+            '-movflags +faststart', // Ensures MP4 compatibility
+          ])
           .output(processedVideoPath)
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
           .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
-            console.log('Processing complete.');
+            console.log('Trimming complete.');
             resolve();
           })
           .on('error', (err: Error) => {
-            console.error('Processing error:', err.message);
+            console.error('Trimming error:', err.message);
             reject(err);
           })
           .run();
       });
 
-      console.log('Sending processed video...');
-      res.download(processedVideoPath, 'downloaded_video.mp4', (err) => {
+      console.log('Sending trimmed video...');
+      res.download(processedVideoPath, 'trimmed_video.mp4', (err) => {
         if (err) {
           console.error('Download error:', err);
-          res.status(500).json({ error: 'Error downloading the video' });
+          return res
+            .status(500)
+            .json({ error: 'Error downloading the trimmed video' });
         }
-
         setTimeout(() => {
-          try {
-            if (fs.existsSync(originalVideoPath))
-              fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(processedVideoPath))
-              fs.unlinkSync(processedVideoPath);
-          } catch (cleanupError) {
-            console.error('Error during file cleanup:', cleanupError);
-          }
+          if (fs.existsSync(originalVideoPath))
+            fs.unlinkSync(originalVideoPath);
+          if (fs.existsSync(processedVideoPath))
+            fs.unlinkSync(processedVideoPath);
         }, 5000);
       });
     } catch (error: unknown) {
