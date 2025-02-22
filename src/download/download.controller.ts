@@ -12,9 +12,6 @@ const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
 const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
-// Install log file path
-const INSTALL_LOG_PATH = path.join(BIN_PATH, 'install_log.txt');
-
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 ffmpeg.setFfprobePath(FFPROBE_PATH);
 
@@ -38,7 +35,7 @@ export class DownloadController {
       }
 
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
-      const trimmedVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+      const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
       console.log('Downloading video...');
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -69,11 +66,6 @@ export class DownloadController {
 
       console.log('Download complete, ensuring correct format...');
 
-      const startTime = parseFloat(start || '0');
-      const endTime = parseFloat(end || '0');
-      const isTrimming =
-        !isNaN(startTime) && !isNaN(endTime) && startTime < endTime;
-
       let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
         '-y',
         '-c:v libx264',
@@ -81,19 +73,41 @@ export class DownloadController {
         '-crf 30',
         '-c:a aac',
         '-b:a 128k',
-        '-movflags +faststart',
+        '-movflags +faststart', // Ensures MP4 compatibility
       ]);
 
-      if (isTrimming) {
-        console.log(`Trimming video from ${startTime} to ${endTime}`);
-        ffmpegCommand = ffmpegCommand
-          .inputOptions([`-ss ${startTime}`])
-          .outputOptions([`-t ${endTime - startTime}`]);
+      let finalVideoPath = processedVideoPath;
+
+      const startTime = start ? parseFloat(start) : null;
+      const endTime = end ? parseFloat(end) : null;
+
+      if (startTime !== null && isNaN(startTime)) {
+        return res.status(400).json({ error: 'Invalid start time provided.' });
+      }
+      if (endTime !== null && isNaN(endTime)) {
+        return res.status(400).json({ error: 'Invalid end time provided.' });
+      }
+      if (startTime !== null && endTime !== null && startTime >= endTime) {
+        return res
+          .status(400)
+          .json({ error: 'Start time must be less than end time.' });
+      }
+
+      if (startTime !== null || endTime !== null) {
+        finalVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+        if (startTime !== null) {
+          console.log(`Trimming from ${startTime}s`);
+          ffmpegCommand = ffmpegCommand.inputOptions(`-ss ${startTime}`);
+        }
+        if (endTime !== null) {
+          console.log(`Trimming to ${endTime}s`);
+          ffmpegCommand = ffmpegCommand.inputOptions(`-to ${endTime}`);
+        }
       }
 
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
-          .output(isTrimming ? trimmedVideoPath : originalVideoPath)
+          .output(finalVideoPath)
           .on('start', (cmd) => console.log('FFmpeg command:', cmd))
           .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
@@ -107,8 +121,6 @@ export class DownloadController {
           .run();
       });
 
-      const finalVideoPath = isTrimming ? trimmedVideoPath : originalVideoPath;
-
       console.log('Sending processed video...');
       res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
         if (err) {
@@ -120,8 +132,7 @@ export class DownloadController {
           try {
             if (fs.existsSync(originalVideoPath))
               fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(trimmedVideoPath))
-              fs.unlinkSync(trimmedVideoPath);
+            if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
           } catch (cleanupError) {
             console.error('Error during file cleanup:', cleanupError);
           }
@@ -132,16 +143,6 @@ export class DownloadController {
       return res
         .status(500)
         .json({ error: 'Failed to download and process video' });
-    }
-  }
-
-  @Get('install-log')
-  getInstallLog(@Res() res: Response) {
-    if (fs.existsSync(INSTALL_LOG_PATH)) {
-      const logContent = fs.readFileSync(INSTALL_LOG_PATH, 'utf8');
-      return res.send(`<pre>${logContent}</pre>`);
-    } else {
-      return res.status(404).json({ error: 'Log file not found' });
     }
   }
 }
