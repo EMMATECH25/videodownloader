@@ -75,8 +75,9 @@ export class DownloadController {
       const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
       console.log('Downloading video...');
-      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "912381434421191v+1309908076727229a" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
-
+      const cookie =
+        'c_user=100056036692197; xs=12%3An-o96l4jTytO4Q%3A2%3A1739509202%3A-1%3A3233%3A%3AAcUWeYLE5zEnIII4ujs4OhezwnvScQNAFBYPqWuL_r4';
+      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bestvideo+bestaudio/best" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg --cookies-from-string "${cookie}" "${url}"`;
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
