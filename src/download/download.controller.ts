@@ -22,27 +22,21 @@ export class DownloadController {
   async expandFacebookUrl(shortUrl: string): Promise<string> {
     try {
       const response = await axios.get(shortUrl, {
-        maxRedirects: 0,
-        validateStatus: (status) => status === 302,
+        maxRedirects: 5, // Allow more redirects
+        validateStatus: (status) => status >= 200 && status < 400,
       });
-      if (response.headers.location) {
-        console.log('Expanded URL:', response.headers.location);
-        return response.headers.location as string;
+      const request = response.request as { res: { responseUrl: string } };
+      if (request.res.responseUrl) {
+        console.log('Expanded URL:', request.res.responseUrl);
+        return request.res.responseUrl;
       }
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        console.warn(
-          'Failed to expand URL:',
-          error.response?.status,
-          error.response?.headers,
-        );
-      } else if (error instanceof Error) {
-        console.warn('Failed to expand URL:', error.message);
-      } else {
-        console.warn('Failed to expand URL due to an unknown error.');
-      }
+    } catch (error) {
+      console.warn(
+        'Failed to expand URL:',
+        axios.isAxiosError(error) ? error.response?.status : error,
+      );
     }
-    return shortUrl; // Fallback to the original URL
+    return shortUrl; // Fallback to original URL
   }
 
   @Get()
