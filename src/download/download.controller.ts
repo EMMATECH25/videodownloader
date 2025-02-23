@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
+import axios from 'axios';
 
 // Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
@@ -17,6 +18,33 @@ ffmpeg.setFfprobePath(FFPROBE_PATH);
 
 @Controller('download')
 export class DownloadController {
+  // Function to resolve shortened Facebook URLs
+  async expandFacebookUrl(shortUrl: string): Promise<string> {
+    try {
+      const response = await axios.get(shortUrl, {
+        maxRedirects: 0,
+        validateStatus: (status) => status === 302,
+      });
+      if (response.headers.location) {
+        console.log('Expanded URL:', response.headers.location);
+        return response.headers.location as string;
+      }
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        console.warn(
+          'Failed to expand URL:',
+          error.response?.status,
+          error.response?.headers,
+        );
+      } else if (error instanceof Error) {
+        console.warn('Failed to expand URL:', error.message);
+      } else {
+        console.warn('Failed to expand URL due to an unknown error.');
+      }
+    }
+    return shortUrl; // Fallback to the original URL
+  }
+
   @Get()
   async downloadVideo(
     @Query('url') url: string,
@@ -29,6 +57,12 @@ export class DownloadController {
     }
 
     try {
+      // Expand Facebook shortened links
+      if (url.includes('fb.watch')) {
+        console.log('Expanding Facebook URL:', url);
+        url = await this.expandFacebookUrl(url);
+      }
+
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
       if (!fs.existsSync(outputPath)) {
         fs.mkdirSync(outputPath, { recursive: true });
@@ -43,8 +77,6 @@ export class DownloadController {
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
-      } else {
-        console.warn('Warning: cookies.txt not found, downloading may fail.');
       }
 
       console.log('Executing command:', ytDlpCommand);
@@ -73,37 +105,37 @@ export class DownloadController {
         '-crf 30',
         '-c:a aac',
         '-b:a 128k',
-        '-movflags +faststart', // Ensures MP4 compatibility
+        '-movflags +faststart',
       ]);
 
-      let finalVideoPath = processedVideoPath;
+      let isTrimming = false;
+      if (start !== undefined || end !== undefined) {
+        const startTime = parseFloat(start || '0'); // Default to 0 if not provided
+        const endTime = parseFloat(end || '0');
 
-      const startTime = start ? parseFloat(start) : null;
-      const endTime = end ? parseFloat(end) : null;
-
-      if (startTime !== null && isNaN(startTime)) {
-        return res.status(400).json({ error: 'Invalid start time provided.' });
-      }
-      if (endTime !== null && isNaN(endTime)) {
-        return res.status(400).json({ error: 'Invalid end time provided.' });
-      }
-      if (startTime !== null && endTime !== null && startTime >= endTime) {
-        return res
-          .status(400)
-          .json({ error: 'Start time must be less than end time.' });
-      }
-
-      if (startTime !== null || endTime !== null) {
-        finalVideoPath = path.join(outputPath, 'trimmed_video.mp4');
-        if (startTime !== null) {
-          console.log(`Trimming from ${startTime}s`);
-          ffmpegCommand = ffmpegCommand.inputOptions(`-ss ${startTime}`);
-        }
-        if (endTime !== null) {
-          console.log(`Trimming to ${endTime}s`);
-          ffmpegCommand = ffmpegCommand.inputOptions(`-to ${endTime}`);
+        if (!isNaN(startTime) && !isNaN(endTime) && endTime > startTime) {
+          console.log(`Trimming video from ${startTime} to ${endTime}`);
+          ffmpegCommand = ffmpegCommand
+            .setStartTime(startTime)
+            .setDuration(endTime - startTime);
+          isTrimming = true;
+        } else if (!isNaN(startTime) && isNaN(endTime)) {
+          console.log(`Trimming video from ${startTime} until the end`);
+          ffmpegCommand = ffmpegCommand.setStartTime(startTime);
+          isTrimming = true;
+        } else if (!isNaN(endTime) && isNaN(startTime)) {
+          console.log(`Trimming video from beginning to ${endTime}`);
+          ffmpegCommand = ffmpegCommand.setDuration(endTime);
+          isTrimming = true;
+        } else {
+          console.error('Invalid start or end time provided.');
+          return res.status(400).json({ error: 'Invalid start or end time.' });
         }
       }
+
+      const finalVideoPath = isTrimming
+        ? path.join(outputPath, 'trimmed_video.mp4')
+        : processedVideoPath;
 
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
