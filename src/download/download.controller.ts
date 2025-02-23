@@ -22,21 +22,30 @@ export class DownloadController {
   async expandFacebookUrl(shortUrl: string): Promise<string> {
     try {
       const response = await axios.get(shortUrl, {
-        maxRedirects: 5, // Allow more redirects
-        validateStatus: (status) => status >= 200 && status < 400,
+        maxRedirects: 5, // Allow multiple redirects
       });
-      const request = response.request as { res: { responseUrl: string } };
-      if (request.res.responseUrl) {
-        console.log('Expanded URL:', request.res.responseUrl);
-        return request.res.responseUrl;
+
+      const responseUrl = (
+        response.request as { res?: { responseUrl?: string } }
+      )?.res?.responseUrl;
+      if (responseUrl) {
+        console.log('Expanded URL:', responseUrl);
+        return responseUrl;
       }
-    } catch (error) {
-      console.warn(
-        'Failed to expand URL:',
-        axios.isAxiosError(error) ? error.response?.status : error,
-      );
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        console.warn(
+          'Failed to expand URL:',
+          error.response?.status,
+          error.response?.headers,
+        );
+      } else if (error instanceof Error) {
+        console.warn('Failed to expand URL:', error.message);
+      } else {
+        console.warn('Failed to expand URL due to an unknown error.');
+      }
     }
-    return shortUrl; // Fallback to original URL
+    return shortUrl; // Fallback to original if expansion fails
   }
 
   @Get()
@@ -66,7 +75,7 @@ export class DownloadController {
       const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
       console.log('Downloading video...');
-      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
+      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "912381434421191v+1309908076727229a" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('Using cookies file for authentication:', COOKIES_PATH);
