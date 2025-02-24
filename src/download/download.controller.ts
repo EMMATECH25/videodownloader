@@ -24,43 +24,35 @@ export class DownloadController {
       console.log('🔍 Expanding Facebook URL:', shortUrl);
 
       const response = await axios.get(shortUrl, {
-        maxRedirects: 0, // Don't auto-follow redirects
-        validateStatus: (status) => status >= 200 && status < 400, // Allow redirects
+        maxRedirects: 5,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', // Avoid bot detection
+        },
       });
 
       console.log('🛠 Response Status:', response.status);
       console.log('📝 Headers:', response.headers);
 
-      // First, try to get the expanded URL from the headers
-      let expandedUrl: string | undefined = response.headers['location'] as
+      let expandedUrl: string | undefined = response.headers.location as
         | string
         | undefined;
 
       if (!expandedUrl) {
-        console.warn(
-          "⚠️ No 'Location' header found. Falling back to response.request.",
-        );
-
         const request = response.request as { res?: { responseUrl?: string } };
-        expandedUrl = request.res?.responseUrl || shortUrl;
+        expandedUrl = request.res?.responseUrl;
+      }
+
+      if (!expandedUrl) {
+        console.warn('⚠️ No valid expanded URL found.');
+        return shortUrl;
       }
 
       console.log('✅ Expanded Facebook URL:', expandedUrl);
       return expandedUrl;
     } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        console.warn(
-          '❌ Failed to expand URL:',
-          error.response?.status,
-          error.response?.headers,
-        );
-      } else if (error instanceof Error) {
-        console.warn('❌ Failed to expand URL:', error.message);
-      } else {
-        console.warn('❌ Failed to expand URL due to an unknown error.');
-      }
+      console.warn('❌ URL Expansion Failed:', error);
+      return shortUrl;
     }
-    return shortUrl; // Fallback if expansion fails
   }
 
   @Get()
