@@ -21,16 +21,16 @@ export class DownloadController {
   // Function to resolve shortened Facebook URLs
   async expandFacebookUrl(shortUrl: string): Promise<string> {
     try {
-      const response = await axios.get(shortUrl, { maxRedirects: 5 });
+      const response = await axios.get(shortUrl, {
+        maxRedirects: 0, // Prevent axios from auto-following redirects
+        validateStatus: (status) => status >= 200 && status < 400, // Allow redirect responses
+      });
 
-      // Correctly typing the response request
-      const request = response.request as { res?: { responseUrl?: string } };
-      const expandedUrl = request.res?.responseUrl;
+      const expandedUrl: string =
+        (response.headers.location as string) || shortUrl;
 
-      if (expandedUrl) {
-        console.log('Expanded URL:', expandedUrl);
-        return expandedUrl;
-      }
+      console.log('Expanded Facebook URL:', expandedUrl);
+      return expandedUrl;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         console.warn(
