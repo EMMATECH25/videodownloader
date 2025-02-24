@@ -21,27 +21,43 @@ export class DownloadController {
   // Function to resolve shortened Facebook URLs
   async expandFacebookUrl(shortUrl: string): Promise<string> {
     try {
+      console.log('🔍 Expanding Facebook URL:', shortUrl);
+
       const response = await axios.get(shortUrl, {
-        maxRedirects: 0, // Prevent axios from auto-following redirects
-        validateStatus: (status) => status >= 200 && status < 400, // Allow redirect responses
+        maxRedirects: 0, // Don't auto-follow redirects
+        validateStatus: (status) => status >= 200 && status < 400, // Allow redirects
       });
 
-      const expandedUrl: string =
-        (response.headers.location as string) || shortUrl;
+      console.log('🛠 Response Status:', response.status);
+      console.log('📝 Headers:', response.headers);
 
-      console.log('Expanded Facebook URL:', expandedUrl);
+      // First, try to get the expanded URL from the headers
+      let expandedUrl: string | undefined = response.headers['location'] as
+        | string
+        | undefined;
+
+      if (!expandedUrl) {
+        console.warn(
+          "⚠️ No 'Location' header found. Falling back to response.request.",
+        );
+
+        const request = response.request as { res?: { responseUrl?: string } };
+        expandedUrl = request.res?.responseUrl || shortUrl;
+      }
+
+      console.log('✅ Expanded Facebook URL:', expandedUrl);
       return expandedUrl;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         console.warn(
-          'Failed to expand URL:',
+          '❌ Failed to expand URL:',
           error.response?.status,
           error.response?.headers,
         );
       } else if (error instanceof Error) {
-        console.warn('Failed to expand URL:', error.message);
+        console.warn('❌ Failed to expand URL:', error.message);
       } else {
-        console.warn('Failed to expand URL due to an unknown error.');
+        console.warn('❌ Failed to expand URL due to an unknown error.');
       }
     }
     return shortUrl; // Fallback if expansion fails
