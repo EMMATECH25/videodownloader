@@ -26,20 +26,14 @@ export class DownloadController {
       const response = await axios.get(shortUrl, {
         maxRedirects: 5,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', // Avoid bot detection
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         },
       });
 
-      console.log('🛠 Response Status:', response.status);
-      console.log('📝 Headers:', response.headers);
-
-      let expandedUrl: string | undefined = response.headers.location as
-        | string
-        | undefined;
-
+      let expandedUrl = response.headers.location as string | undefined;
       if (!expandedUrl) {
         const request = response.request as { res?: { responseUrl?: string } };
-        expandedUrl = request.res?.responseUrl;
+        expandedUrl = request?.res?.responseUrl;
       }
 
       if (!expandedUrl) {
@@ -49,8 +43,8 @@ export class DownloadController {
 
       console.log('✅ Expanded Facebook URL:', expandedUrl);
       return expandedUrl;
-    } catch (error: unknown) {
-      console.warn('❌ URL Expansion Failed:', error);
+    } catch (error) {
+      console.error('❌ URL Expansion Failed:', error);
       return shortUrl;
     }
   }
@@ -84,11 +78,14 @@ export class DownloadController {
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
       }
 
-      console.log('Executing command:', ytDlpCommand);
+      console.log('▶️ Running yt-dlp command:', ytDlpCommand);
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
-          if (error) return reject(error);
-          console.log(stdout || stderr);
+          console.log('📥 yt-dlp output:', stdout);
+          if (error) {
+            console.error('❌ yt-dlp error:', stderr);
+            return reject(new Error(`yt-dlp failed: ${stderr}`));
+          }
           resolve();
         });
       });
@@ -131,28 +128,45 @@ export class DownloadController {
       const finalVideoPath = isTrimming
         ? path.join(outputPath, 'trimmed_video.mp4')
         : processedVideoPath;
+
+      console.log('▶️ Running ffmpeg command...');
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
           .output(finalVideoPath)
-          .on('end', () => resolve())
-          .on('error', reject)
+          .on('start', (cmd) => console.log('🎬 ffmpeg command:', cmd))
+          .on('end', () => {
+            console.log('✅ ffmpeg processing complete.');
+            resolve();
+          })
+          .on('error', (err) => {
+            console.error('❌ ffmpeg error:', err.message);
+            reject(new Error(`ffmpeg failed: ${err.message}`));
+          })
           .run();
       });
 
       res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
-        if (err)
+        if (err) {
+          console.error('❌ Error sending file:', err);
           return res.status(500).json({ error: 'Error downloading the video' });
+        }
+        console.log('✅ File sent successfully.');
+
+        // Cleanup
         setTimeout(() => {
           [originalVideoPath, finalVideoPath].forEach((file) => {
-            if (fs.existsSync(file)) fs.unlinkSync(file);
+            if (fs.existsSync(file)) {
+              console.log('🗑 Deleting file:', file);
+              fs.unlinkSync(file);
+            }
           });
         }, 5000);
       });
-    } catch (error) {
-      console.error('Error:', error);
-      return res
-        .status(500)
-        .json({ error: 'Failed to download and process video' });
+    } catch (error: unknown) {
+      console.error('❌ Unexpected Error:', error);
+      return res.status(500).json({
+        error: `Failed to download and process video: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
     }
   }
 }
