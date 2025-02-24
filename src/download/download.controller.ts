@@ -70,7 +70,7 @@ export class DownloadController {
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
       const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
-      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bestvideo+bestaudio/best" --merge-output-format mp4 --add-header "User-Agent: Mozilla/5.0" "${url}"`;
+      let ytDlpCommand = `${YT_DLP_PATH} --no-check-certificate --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f "bestvideo+bestaudio/best" --merge-output-format mp4 --add-header "User-Agent: Mozilla/5.0" --verbose "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
