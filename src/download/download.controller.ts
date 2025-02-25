@@ -4,7 +4,6 @@ import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
-import axios from 'axios';
 
 // Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
@@ -18,37 +17,6 @@ ffmpeg.setFfprobePath(FFPROBE_PATH);
 
 @Controller('download')
 export class DownloadController {
-  // Function to resolve shortened Facebook URLs
-  async expandFacebookUrl(shortUrl: string): Promise<string> {
-    try {
-      console.log('🔍 Expanding Facebook URL:', shortUrl);
-
-      const response = await axios.get(shortUrl, {
-        maxRedirects: 5,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        },
-      });
-
-      let expandedUrl = response.headers.location as string | undefined;
-      if (!expandedUrl) {
-        const request = response.request as { res?: { responseUrl?: string } };
-        expandedUrl = request?.res?.responseUrl;
-      }
-
-      if (!expandedUrl) {
-        console.warn('⚠️ No valid expanded URL found.');
-        return shortUrl;
-      }
-
-      console.log('✅ Expanded Facebook URL:', expandedUrl);
-      return expandedUrl;
-    } catch (error) {
-      console.error('❌ URL Expansion Failed:', error);
-      return shortUrl;
-    }
-  }
-
   @Get()
   async downloadVideo(
     @Query('url') url: string,
@@ -61,31 +29,33 @@ export class DownloadController {
     }
 
     try {
-      if (url.includes('fb.watch')) {
-        url = await this.expandFacebookUrl(url);
-      }
-
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
-      if (!fs.existsSync(outputPath))
+      if (!fs.existsSync(outputPath)) {
         fs.mkdirSync(outputPath, { recursive: true });
+      }
 
       const originalVideoPath = path.join(outputPath, 'original_video.mp4');
       const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
 
-      let ytDlpCommand = `${YT_DLP_PATH} --no-check-certificate --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f "bestvideo+bestaudio/best" --merge-output-format mp4 --add-header "User-Agent: Mozilla/5.0" --verbose "${url}"`;
+      console.log('Downloading video...');
+      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
+        console.log('Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
+      } else {
+        console.warn('Warning: cookies.txt not found, downloading may fail.');
       }
 
-      console.log('▶️ Running yt-dlp command:', ytDlpCommand);
+      console.log('Executing command:', ytDlpCommand);
+
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
-          console.log('📥 yt-dlp output:', stdout);
           if (error) {
-            console.error('❌ yt-dlp error:', stderr);
-            return reject(new Error(`yt-dlp failed: ${stderr}`));
+            console.error('yt-dlp error:', error.message);
+            return reject(error);
           }
+          console.log(stdout || stderr);
           resolve();
         });
       });
@@ -94,6 +64,8 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
+      console.log('Download complete, ensuring correct format...');
+
       let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
         '-y',
         '-c:v libx264',
@@ -101,72 +73,76 @@ export class DownloadController {
         '-crf 30',
         '-c:a aac',
         '-b:a 128k',
-        '-movflags +faststart',
+        '-movflags +faststart', // Ensures MP4 compatibility
       ]);
-      let isTrimming = false;
 
-      if (start || end) {
-        const startTime = parseFloat(start || '0');
-        const endTime = parseFloat(end || '0');
+      let finalVideoPath = processedVideoPath;
 
-        if (!isNaN(startTime) && !isNaN(endTime) && endTime > startTime) {
-          ffmpegCommand = ffmpegCommand
-            .setStartTime(startTime)
-            .setDuration(endTime - startTime);
-          isTrimming = true;
-        } else if (!isNaN(startTime) && isNaN(endTime)) {
-          ffmpegCommand = ffmpegCommand.setStartTime(startTime);
-          isTrimming = true;
-        } else if (!isNaN(endTime) && isNaN(startTime)) {
-          ffmpegCommand = ffmpegCommand.setDuration(endTime);
-          isTrimming = true;
-        } else {
-          return res.status(400).json({ error: 'Invalid start or end time.' });
+      const startTime = start ? parseFloat(start) : null;
+      const endTime = end ? parseFloat(end) : null;
+
+      if (startTime !== null && isNaN(startTime)) {
+        return res.status(400).json({ error: 'Invalid start time provided.' });
+      }
+      if (endTime !== null && isNaN(endTime)) {
+        return res.status(400).json({ error: 'Invalid end time provided.' });
+      }
+      if (startTime !== null && endTime !== null && startTime >= endTime) {
+        return res
+          .status(400)
+          .json({ error: 'Start time must be less than end time.' });
+      }
+
+      if (startTime !== null || endTime !== null) {
+        finalVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+        if (startTime !== null) {
+          console.log(`Trimming from ${startTime}s`);
+          ffmpegCommand = ffmpegCommand.inputOptions(`-ss ${startTime}`);
+        }
+        if (endTime !== null) {
+          console.log(`Trimming to ${endTime}s`);
+          ffmpegCommand = ffmpegCommand.inputOptions(`-to ${endTime}`);
         }
       }
 
-      const finalVideoPath = isTrimming
-        ? path.join(outputPath, 'trimmed_video.mp4')
-        : processedVideoPath;
-
-      console.log('▶️ Running ffmpeg command...');
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
           .output(finalVideoPath)
-          .on('start', (cmd) => console.log('🎬 ffmpeg command:', cmd))
+          .on('start', (cmd) => console.log('FFmpeg command:', cmd))
+          .on('progress', (progress) => console.log('Progress:', progress))
           .on('end', () => {
-            console.log('✅ ffmpeg processing complete.');
+            console.log('Processing complete.');
             resolve();
           })
-          .on('error', (err) => {
-            console.error('❌ ffmpeg error:', err.message);
-            reject(new Error(`ffmpeg failed: ${err.message}`));
+          .on('error', (err: Error) => {
+            console.error('Processing error:', err.message);
+            reject(err);
           })
           .run();
       });
 
+      console.log('Sending processed video...');
       res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
         if (err) {
-          console.error('❌ Error sending file:', err);
+          console.error('Download error:', err);
           return res.status(500).json({ error: 'Error downloading the video' });
         }
-        console.log('✅ File sent successfully.');
 
-        // Cleanup
         setTimeout(() => {
-          [originalVideoPath, finalVideoPath].forEach((file) => {
-            if (fs.existsSync(file)) {
-              console.log('🗑 Deleting file:', file);
-              fs.unlinkSync(file);
-            }
-          });
+          try {
+            if (fs.existsSync(originalVideoPath))
+              fs.unlinkSync(originalVideoPath);
+            if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
+          } catch (cleanupError) {
+            console.error('Error during file cleanup:', cleanupError);
+          }
         }, 5000);
       });
     } catch (error: unknown) {
-      console.error('❌ Unexpected Error:', error);
-      return res.status(500).json({
-        error: `Failed to download and process video: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      });
+      console.error('Error:', error instanceof Error ? error.message : error);
+      return res
+        .status(500)
+        .json({ error: 'Failed to download and process video' });
     }
   }
 }
