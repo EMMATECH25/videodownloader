@@ -53,11 +53,14 @@ export class DownloadController {
         exec(ytDlpCommand, (error, stdout, stderr) => {
           if (error) {
             console.error('yt-dlp error:', error.message);
-            return reject(error);
+            reject(new Error('Download failed. Please try again.'));
+            return; // Stop execution here
           }
           console.log(stdout || stderr);
           resolve();
         });
+      }).catch((error: Error) => {
+        console.error('Download process failed:', error.message);
       });
 
       if (!fs.existsSync(originalVideoPath)) {
