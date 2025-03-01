@@ -125,9 +125,12 @@ export class DownloadController {
       res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
         if (err) {
           console.error('Download error:', err);
-          return res.status(500).json({ error: 'Error downloading the video' });
+
+          // Only log the error instead of sending another response
+          return;
         }
 
+        // Cleanup files after the response is successfully sent
         setTimeout(() => {
           try {
             if (fs.existsSync(originalVideoPath))
