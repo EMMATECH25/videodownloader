@@ -43,8 +43,6 @@ export class DownloadController {
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
-      } else {
-        console.warn('Warning: cookies.txt not found, downloading may fail.');
       }
 
       console.log('Executing command:', ytDlpCommand);
@@ -54,13 +52,11 @@ export class DownloadController {
           if (error) {
             console.error('yt-dlp error:', error.message);
             reject(new Error('Download failed. Please try again.'));
-            return; // Stop execution here
+            return;
           }
           console.log(stdout || stderr);
           resolve();
         });
-      }).catch((error: Error) => {
-        console.error('Download process failed:', error.message);
       });
 
       if (!fs.existsSync(originalVideoPath)) {
@@ -76,13 +72,13 @@ export class DownloadController {
         '-crf 30',
         '-c:a aac',
         '-b:a 128k',
-        '-movflags +faststart', // Ensures MP4 compatibility
+        '-movflags +faststart',
       ]);
 
       let finalVideoPath = processedVideoPath;
 
-      const startTime = start ? parseFloat(start) : null;
-      const endTime = end ? parseFloat(end) : null;
+      const startTime = start ? parseInt(start, 10) : null;
+      const endTime = end ? parseInt(end, 10) : null;
 
       if (startTime !== null && isNaN(startTime)) {
         return res.status(400).json({ error: 'Invalid start time provided.' });
@@ -98,13 +94,12 @@ export class DownloadController {
 
       if (startTime !== null || endTime !== null) {
         finalVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+        ffmpegCommand = ffmpegCommand.input(originalVideoPath);
         if (startTime !== null) {
-          console.log(`Trimming from ${startTime}s`);
-          ffmpegCommand = ffmpegCommand.inputOptions(`-ss ${startTime}`);
+          ffmpegCommand = ffmpegCommand.setStartTime(startTime);
         }
         if (endTime !== null) {
-          console.log(`Trimming to ${endTime}s`);
-          ffmpegCommand = ffmpegCommand.inputOptions(`-to ${endTime}`);
+          ffmpegCommand = ffmpegCommand.setDuration(endTime - (startTime || 0));
         }
       }
 
@@ -125,26 +120,8 @@ export class DownloadController {
       });
 
       console.log('Sending processed video...');
-      res.download(finalVideoPath, 'downloaded_video.mp4', (err) => {
-        if (err) {
-          console.error('Download error:', err);
-
-          // Only log the error instead of sending another response
-          return;
-        }
-
-        // Cleanup files after the response is successfully sent
-        setTimeout(() => {
-          try {
-            if (fs.existsSync(originalVideoPath))
-              fs.unlinkSync(originalVideoPath);
-            if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
-          } catch (cleanupError) {
-            console.error('Error during file cleanup:', cleanupError);
-          }
-        }, 5000);
-      });
-    } catch (error: unknown) {
+      res.download(finalVideoPath, 'downloaded_video.mp4');
+    } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       return res
         .status(500)
