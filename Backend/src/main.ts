@@ -1,24 +1,31 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
+import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create(AppModule);
 
-  // Enable CORS if frontend and backend are running separately during development
-  app.enableCors();
+  app.useGlobalFilters(); // Add global exception handling if needed
 
-  // Serve static files from the "public" folder
-  app.useStaticAssets(join(__dirname, '..', 'public'));
-  app.setBaseViewsDir(join(__dirname, '..', 'public'));
+  const port = process.env.PORT || 3000;
 
-  // Start the application
-  const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`Server is running on http://localhost:${port}`);
+  Logger.log(`🚀 Server running on http://localhost:${port}`);
 }
 
-bootstrap().catch((err) => {
-  console.error('Error during bootstrap:', err);
+// Safe error handling
+process.on('uncaughtException', (error: unknown) => {
+  if (error instanceof Error) {
+    Logger.error(`Uncaught Exception: ${error.message}`, error.stack);
+  } else {
+    Logger.error(`Uncaught Exception:`, error);
+  }
+});
+
+process.on('unhandledRejection', (reason: unknown, promise: Promise<any>) => {
+  Logger.error(`Unhandled Rejection at:`, promise, 'Reason:', reason);
+});
+
+bootstrap().catch((error) => {
+  Logger.error('Error during bootstrap', error);
 });

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "types": ["node", "multer"],
+    "types": ["node", "multer","jest"],
     "module": "commonjs",
     "declaration": true,
     "removeComments": true,
@@ -17,6 +17,10 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
-  }
+    "noFallthroughCasesInSwitch": false,
+    "typeRoots": ["node_modules/@types"]
+    }
+  ,
+  "exclude": ["node_modules", "dist"],
+  
 }
