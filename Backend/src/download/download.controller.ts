@@ -29,6 +29,8 @@ export class DownloadController {
     }
 
     try {
+      console.log(`Received download request for URL: ${url}`);
+
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
       if (!fs.existsSync(outputPath)) {
         fs.mkdirSync(outputPath, { recursive: true });
@@ -44,6 +46,14 @@ export class DownloadController {
         outputPath,
         `processed_${timestamp}.mp4`,
       );
+
+      // **Ensure old files are deleted before downloading a new video**
+      fs.readdirSync(outputPath).forEach((file) => {
+        if (file.startsWith('original_') || file.startsWith('processed_')) {
+          fs.unlinkSync(path.join(outputPath, file));
+          console.log(`Deleted old file: ${file}`);
+        }
+      });
 
       console.log(`Downloading new video: ${url}`);
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -127,7 +137,7 @@ export class DownloadController {
           .run();
       });
 
-      console.log('Sending processed video...');
+      console.log(`Sending file: ${finalVideoPath}`);
       res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
 
       // **Delete old files after sending to avoid unnecessary storage**
