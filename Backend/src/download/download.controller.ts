@@ -5,7 +5,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
 
-// Define absolute paths for binaries
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
 const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
 const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
@@ -22,20 +21,21 @@ export class DownloadController {
     @Query('start') start?: string,
     @Query('end') end?: string,
   ) {
+    console.log(`\n🔄 NEW DOWNLOAD REQUEST`);
+    console.log(`🌐 URL: ${url}`);
+    console.log(`🕒 Received at: ${new Date().toISOString()}`);
+
     if (!url) {
+      console.log('❌ Error: No URL provided');
       return res.status(400).json({ error: 'Please provide a video URL!' });
     }
 
     try {
-      console.log(`\n🔄 NEW DOWNLOAD REQUEST: ${url}`);
-      console.log(`Received at: ${new Date().toISOString()}`);
-
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
       if (!fs.existsSync(outputPath)) {
         fs.mkdirSync(outputPath, { recursive: true });
       }
 
-      // **Generate unique filenames using timestamps**
       const timestamp = Date.now();
       const originalVideoPath = path.join(
         outputPath,
@@ -46,25 +46,24 @@ export class DownloadController {
         `processed_${timestamp}.mp4`,
       );
 
-      // **Check if this request is different from the last one**
-      console.log(`Generated filenames:`);
-      console.log(`   - Original Video Path: ${originalVideoPath}`);
-      console.log(`   - Processed Video Path: ${processedVideoPath}`);
+      console.log(`📂 Output Path: ${outputPath}`);
+      console.log(
+        `📄 Generated Filenames:\n   - Original: ${originalVideoPath}\n   - Processed: ${processedVideoPath}`,
+      );
 
-      // **Ensure old files are deleted before downloading**
+      console.log(`🚀 Deleting old files before download`);
       fs.readdirSync(outputPath).forEach((file) => {
         if (file.startsWith('original_') || file.startsWith('processed_')) {
           const filePath = path.join(outputPath, file);
           fs.unlinkSync(filePath);
-          console.log(`🗑 Deleted old file: ${filePath}`);
+          console.log(`🗑 Deleted: ${filePath}`);
         }
       });
 
-      console.log(`🚀 Starting download for: ${url}`);
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
-        console.log('🔐 Using cookies file for authentication:', COOKIES_PATH);
+        console.log('🔐 Using cookies:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
       }
 
@@ -83,6 +82,7 @@ export class DownloadController {
       });
 
       if (!fs.existsSync(originalVideoPath)) {
+        console.error('❌ Download failed: File was not created.');
         throw new Error('Download failed: File was not created.');
       }
 
@@ -134,7 +134,6 @@ export class DownloadController {
       console.log(`📤 Sending file to user: ${finalVideoPath}`);
       res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
 
-      // **Auto-delete files after sending**
       setTimeout(
         () => {
           if (fs.existsSync(originalVideoPath))
