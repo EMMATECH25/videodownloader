@@ -9,11 +9,9 @@ import * as ffmpeg from 'fluent-ffmpeg';
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
 const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
 const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
-const FFPROBE_PATH = path.join(BIN_PATH, 'ffprobe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
-ffmpeg.setFfprobePath(FFPROBE_PATH);
 
 @Controller('download')
 export class DownloadController {
@@ -29,14 +27,15 @@ export class DownloadController {
     }
 
     try {
-      console.log(`Received download request for URL: ${url}`);
+      console.log(`\n🔄 NEW DOWNLOAD REQUEST: ${url}`);
+      console.log(`Received at: ${new Date().toISOString()}`);
 
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
       if (!fs.existsSync(outputPath)) {
         fs.mkdirSync(outputPath, { recursive: true });
       }
 
-      // **Generate unique filenames for each download**
+      // **Generate unique filenames using timestamps**
       const timestamp = Date.now();
       const originalVideoPath = path.join(
         outputPath,
@@ -47,28 +46,34 @@ export class DownloadController {
         `processed_${timestamp}.mp4`,
       );
 
-      // **Ensure old files are deleted before downloading a new video**
+      // **Check if this request is different from the last one**
+      console.log(`Generated filenames:`);
+      console.log(`   - Original Video Path: ${originalVideoPath}`);
+      console.log(`   - Processed Video Path: ${processedVideoPath}`);
+
+      // **Ensure old files are deleted before downloading**
       fs.readdirSync(outputPath).forEach((file) => {
         if (file.startsWith('original_') || file.startsWith('processed_')) {
-          fs.unlinkSync(path.join(outputPath, file));
-          console.log(`Deleted old file: ${file}`);
+          const filePath = path.join(outputPath, file);
+          fs.unlinkSync(filePath);
+          console.log(`🗑 Deleted old file: ${filePath}`);
         }
       });
 
-      console.log(`Downloading new video: ${url}`);
+      console.log(`🚀 Starting download for: ${url}`);
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
-        console.log('Using cookies file for authentication:', COOKIES_PATH);
+        console.log('🔐 Using cookies file for authentication:', COOKIES_PATH);
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
       }
 
-      console.log('Executing command:', ytDlpCommand);
+      console.log(`🖥 Executing command:\n   ${ytDlpCommand}`);
 
       await new Promise<void>((resolve, reject) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
           if (error) {
-            console.error('yt-dlp error:', error.message);
+            console.error('❌ yt-dlp error:', error.message);
             reject(new Error('Download failed. Please try again.'));
             return;
           }
@@ -81,8 +86,9 @@ export class DownloadController {
         throw new Error('Download failed: File was not created.');
       }
 
-      console.log('Download complete, ensuring correct format...');
+      console.log(`✅ Download complete: ${originalVideoPath}`);
 
+      let finalVideoPath = processedVideoPath;
       let ffmpegCommand = ffmpeg(originalVideoPath).outputOptions([
         '-y',
         '-c:v libx264',
@@ -93,22 +99,8 @@ export class DownloadController {
         '-movflags +faststart',
       ]);
 
-      let finalVideoPath = processedVideoPath;
-
       const startTime = start ? parseInt(start, 10) : null;
       const endTime = end ? parseInt(end, 10) : null;
-
-      if (startTime !== null && isNaN(startTime)) {
-        return res.status(400).json({ error: 'Invalid start time provided.' });
-      }
-      if (endTime !== null && isNaN(endTime)) {
-        return res.status(400).json({ error: 'Invalid end time provided.' });
-      }
-      if (startTime !== null && endTime !== null && startTime >= endTime) {
-        return res
-          .status(400)
-          .json({ error: 'Start time must be less than end time.' });
-      }
 
       if (startTime !== null || endTime !== null) {
         finalVideoPath = path.join(outputPath, `trimmed_${timestamp}.mp4`);
@@ -124,34 +116,41 @@ export class DownloadController {
       await new Promise<void>((resolve, reject) => {
         ffmpegCommand
           .output(finalVideoPath)
-          .on('start', (cmd) => console.log('FFmpeg command:', cmd))
-          .on('progress', (progress) => console.log('Progress:', progress))
+          .on('start', (cmd) => console.log(`🎬 FFmpeg processing:\n   ${cmd}`))
+          .on('progress', (progress) =>
+            console.log(`⏳ Progress: ${progress.percent || '0'}%`),
+          )
           .on('end', () => {
-            console.log('Processing complete.');
+            console.log(`✅ Processing complete: ${finalVideoPath}`);
             resolve();
           })
           .on('error', (err: Error) => {
-            console.error('Processing error:', err.message);
+            console.error('❌ Processing error:', err.message);
             reject(err);
           })
           .run();
       });
 
-      console.log(`Sending file: ${finalVideoPath}`);
+      console.log(`📤 Sending file to user: ${finalVideoPath}`);
       res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
 
-      // **Delete old files after sending to avoid unnecessary storage**
+      // **Auto-delete files after sending**
       setTimeout(
         () => {
           if (fs.existsSync(originalVideoPath))
             fs.unlinkSync(originalVideoPath);
           if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
-          console.log(`Deleted files: ${originalVideoPath}, ${finalVideoPath}`);
+          console.log(
+            `🗑 Deleted files: ${originalVideoPath}, ${finalVideoPath}`,
+          );
         },
         5 * 60 * 1000,
-      ); // 5 minutes after download
+      );
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      console.error(
+        '❌ Error:',
+        error instanceof Error ? error.message : error,
+      );
       return res
         .status(500)
         .json({ error: 'Failed to download and process video' });
