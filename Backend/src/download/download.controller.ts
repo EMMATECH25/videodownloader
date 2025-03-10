@@ -34,10 +34,18 @@ export class DownloadController {
         fs.mkdirSync(outputPath, { recursive: true });
       }
 
-      const originalVideoPath = path.join(outputPath, 'original_video.mp4');
-      const processedVideoPath = path.join(outputPath, 'processed_video.mp4');
+      // **Generate unique filenames for each download**
+      const timestamp = Date.now();
+      const originalVideoPath = path.join(
+        outputPath,
+        `original_${timestamp}.mp4`,
+      );
+      const processedVideoPath = path.join(
+        outputPath,
+        `processed_${timestamp}.mp4`,
+      );
 
-      console.log('Downloading video...');
+      console.log(`Downloading new video: ${url}`);
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
       if (fs.existsSync(COOKIES_PATH)) {
@@ -93,7 +101,7 @@ export class DownloadController {
       }
 
       if (startTime !== null || endTime !== null) {
-        finalVideoPath = path.join(outputPath, 'trimmed_video.mp4');
+        finalVideoPath = path.join(outputPath, `trimmed_${timestamp}.mp4`);
         ffmpegCommand = ffmpegCommand.input(originalVideoPath);
         if (startTime !== null) {
           ffmpegCommand = ffmpegCommand.setStartTime(startTime);
@@ -120,7 +128,18 @@ export class DownloadController {
       });
 
       console.log('Sending processed video...');
-      res.download(finalVideoPath, 'downloaded_video.mp4');
+      res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
+
+      // **Delete old files after sending to avoid unnecessary storage**
+      setTimeout(
+        () => {
+          if (fs.existsSync(originalVideoPath))
+            fs.unlinkSync(originalVideoPath);
+          if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
+          console.log(`Deleted files: ${originalVideoPath}, ${finalVideoPath}`);
+        },
+        5 * 60 * 1000,
+      ); // 5 minutes after download
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : error);
       return res
