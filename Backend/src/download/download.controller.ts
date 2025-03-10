@@ -36,11 +36,16 @@ export class DownloadController {
         fs.mkdirSync(outputPath, { recursive: true });
       }
 
+      // **Clear ALL old video files before starting a new download**
+      fs.readdirSync(outputPath).forEach((file) => {
+        const filePath = path.join(outputPath, file);
+        fs.unlinkSync(filePath);
+        console.log(`🗑 Deleted old file: ${filePath}`);
+      });
+
+      // **Ensure unique filenames per request**
       const timestamp = Date.now();
-      const originalVideoPath = path.join(
-        outputPath,
-        `original_${timestamp}.mp4`,
-      );
+      const originalVideoPath = path.join(outputPath, `video_${timestamp}.mp4`);
       const processedVideoPath = path.join(
         outputPath,
         `processed_${timestamp}.mp4`,
@@ -50,15 +55,6 @@ export class DownloadController {
       console.log(
         `📄 Generated Filenames:\n   - Original: ${originalVideoPath}\n   - Processed: ${processedVideoPath}`,
       );
-
-      console.log(`🚀 Deleting old files before download`);
-      fs.readdirSync(outputPath).forEach((file) => {
-        if (file.startsWith('original_') || file.startsWith('processed_')) {
-          const filePath = path.join(outputPath, file);
-          fs.unlinkSync(filePath);
-          console.log(`🗑 Deleted: ${filePath}`);
-        }
-      });
 
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
 
