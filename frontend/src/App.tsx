@@ -22,12 +22,15 @@ function App() {
     }
     setErrorMessage('');
 
-    let downloadUrl = `https://videodownloader-backend-8n9n.onrender.com/download?url=${encodeURIComponent(videoUrl)}`;
+    // Use /api/ prefix to correctly route through the backend
+    let downloadUrl = `https://videodownloader-backend-8n9n.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
+
     if (startTime) downloadUrl += `&start=${timeToSeconds(startTime)}`;
     if (endTime) downloadUrl += `&end=${timeToSeconds(endTime)}`;
 
     window.location.href = downloadUrl;
-  };
+};
+
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">

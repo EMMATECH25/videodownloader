@@ -12,7 +12,7 @@ const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 
-@Controller('download')
+@Controller('api/download') // ✅ Updated to match your global prefix
 export class DownloadController {
   @Get()
   async downloadVideo(
@@ -25,6 +25,15 @@ export class DownloadController {
     console.log(`🌐 URL: ${url}`);
     console.log(`🕒 Received at: ${new Date().toISOString()}`);
 
+    // **Set No-Cache Headers**
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     if (!url) {
       console.log('❌ Error: No URL provided');
       return res.status(400).json({ error: 'Please provide a video URL!' });
@@ -32,18 +41,14 @@ export class DownloadController {
 
     try {
       const outputPath = path.join(__dirname, '..', '..', 'downloads');
-      if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, { recursive: true });
-      }
 
-      // **Clear ALL old video files before starting a new download**
+      // **Clear previous video files**
       fs.readdirSync(outputPath).forEach((file) => {
         const filePath = path.join(outputPath, file);
         fs.unlinkSync(filePath);
         console.log(`🗑 Deleted old file: ${filePath}`);
       });
 
-      // **Ensure unique filenames per request**
       const timestamp = Date.now();
       const originalVideoPath = path.join(outputPath, `video_${timestamp}.mp4`);
       const processedVideoPath = path.join(
@@ -53,7 +58,7 @@ export class DownloadController {
 
       console.log(`📂 Output Path: ${outputPath}`);
       console.log(
-        `📄 Generated Filenames:\n   - Original: ${originalVideoPath}\n   - Processed: ${processedVideoPath}`,
+        `📄 Generated Filenames: ${originalVideoPath}, ${processedVideoPath}`,
       );
 
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -63,23 +68,29 @@ export class DownloadController {
         ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
       }
 
-      console.log(`🖥 Executing command:\n   ${ytDlpCommand}`);
+      console.log(`🖥 Executing yt-dlp command:\n   ${ytDlpCommand}`);
 
-      await new Promise<void>((resolve, reject) => {
+      const downloadSuccess = await new Promise<boolean>((resolve) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
+          console.log('📄 yt-dlp Output:', stdout);
+          console.log('⚠ yt-dlp Errors:', stderr);
+
           if (error) {
-            console.error('❌ yt-dlp error:', error.message);
-            reject(new Error('Download failed. Please try again.'));
+            console.error('❌ yt-dlp Execution Error:', error.message);
+            resolve(false);
             return;
           }
-          console.log(stdout || stderr);
-          resolve();
+
+          console.log(`✅ yt-dlp Download Completed!`);
+          resolve(true);
         });
       });
 
-      if (!fs.existsSync(originalVideoPath)) {
+      if (!downloadSuccess || !fs.existsSync(originalVideoPath)) {
         console.error('❌ Download failed: File was not created.');
-        throw new Error('Download failed: File was not created.');
+        return res
+          .status(500)
+          .json({ error: 'Download failed. Please try again.' });
       }
 
       console.log(`✅ Download complete: ${originalVideoPath}`);
@@ -109,7 +120,7 @@ export class DownloadController {
         }
       }
 
-      await new Promise<void>((resolve, reject) => {
+      const processingSuccess = await new Promise<boolean>((resolve) => {
         ffmpegCommand
           .output(finalVideoPath)
           .on('start', (cmd) => console.log(`🎬 FFmpeg processing:\n   ${cmd}`))
@@ -118,26 +129,32 @@ export class DownloadController {
           )
           .on('end', () => {
             console.log(`✅ Processing complete: ${finalVideoPath}`);
-            resolve();
+            resolve(true);
           })
           .on('error', (err: Error) => {
             console.error('❌ Processing error:', err.message);
-            reject(err);
+            resolve(false);
           })
           .run();
       });
 
+      if (!processingSuccess || !fs.existsSync(finalVideoPath)) {
+        console.error('❌ Video processing failed.');
+        return res.status(500).json({ error: 'Video processing failed.' });
+      }
+
       console.log(`📤 Sending file to user: ${finalVideoPath}`);
       res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
 
+      // **Step 5: Cleanup - Delete files after sending**
       setTimeout(
         () => {
-          if (fs.existsSync(originalVideoPath))
-            fs.unlinkSync(originalVideoPath);
-          if (fs.existsSync(finalVideoPath)) fs.unlinkSync(finalVideoPath);
-          console.log(
-            `🗑 Deleted files: ${originalVideoPath}, ${finalVideoPath}`,
-          );
+          [originalVideoPath, finalVideoPath].forEach((file) => {
+            if (fs.existsSync(file)) {
+              fs.unlinkSync(file);
+              console.log(`🗑 Deleted file: ${file}`);
+            }
+          });
         },
         5 * 60 * 1000,
       );

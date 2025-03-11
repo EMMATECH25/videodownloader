@@ -19,7 +19,8 @@ function App() {
             return;
         }
         setErrorMessage('');
-        let downloadUrl = `https://videodownloader-backend-8n9n.onrender.com/download?url=${encodeURIComponent(videoUrl)}`;
+        // Use /api/ prefix to correctly route through the backend
+        let downloadUrl = `https://videodownloader-backend-8n9n.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
         if (startTime)
             downloadUrl += `&start=${timeToSeconds(startTime)}`;
         if (endTime)
