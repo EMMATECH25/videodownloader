@@ -3,7 +3,7 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
-import ytdlp from 'yt-dlp-exec'; // ✅ Corrected Import
+import * as ytdlp from 'yt-dlp-exec'; // ✅ Fixed Import
 
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 const FFMPEG_PATH = path.join(__dirname, '..', '..', 'bin', 'ffmpeg.exe');
@@ -55,7 +55,7 @@ export class DownloadController {
         ytDlpArgs['cookies'] = COOKIES_PATH;
       }
 
-      await ytdlp(url, ytDlpArgs); // ✅ Fixed yt-dlp-exec call
+      await ytdlp.exec(url, ytDlpArgs); // ✅ Fixed yt-dlp-exec call
 
       console.log(`✅ yt-dlp Download Completed!`);
 
@@ -124,20 +124,8 @@ export class DownloadController {
           console.log(`✅ File successfully sent to user: ${finalVideoPath}`);
         }
 
-        fs.unlink(finalVideoPath, (err) => {
-          if (err) console.error('❌ Error deleting processed file:', err);
-          else console.log(`🗑 Deleted processed file: ${finalVideoPath}`);
-        });
-
-        fs.unlink(originalVideoPath, (err) => {
-          if (err) console.error('❌ Error deleting original file:', err);
-          else console.log(`🗑 Deleted original file: ${originalVideoPath}`);
-        });
-
-        fs.rmdir(tmpDir, { recursive: true }, (err) => {
-          if (err) console.error('❌ Error deleting temp directory:', err);
-          else console.log(`🗑 Deleted temp directory: ${tmpDir}`);
-        });
+        // Cleanup files after sending
+        this.cleanupFiles([finalVideoPath, originalVideoPath, tmpDir]);
       });
     } catch (error) {
       console.error(
@@ -148,5 +136,14 @@ export class DownloadController {
         .status(500)
         .json({ error: 'Failed to download and process video' });
     }
+  }
+
+  private cleanupFiles(files: string[]) {
+    files.forEach((filePath) => {
+      fs.rm(filePath, { recursive: true, force: true }, (err) => {
+        if (err) console.error(`❌ Error deleting ${filePath}:`, err);
+        else console.log(`🗑 Deleted: ${filePath}`);
+      });
+    });
   }
 }
