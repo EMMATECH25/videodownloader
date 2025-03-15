@@ -6,9 +6,8 @@ import * as ffmpeg from 'fluent-ffmpeg';
 import * as ytdlp from 'yt-dlp-exec'; // ✅ Fixed Import
 
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
-const FFMPEG_PATH = path.join(__dirname, '..', '..', 'bin', 'ffmpeg.exe');
 
-ffmpeg.setFfmpegPath(FFMPEG_PATH);
+ffmpeg.setFfmpegPath('/usr/bin/ffmpeg');
 
 @Controller('download')
 export class DownloadController {
