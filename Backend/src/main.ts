@@ -8,11 +8,15 @@ import { Request, Response, NextFunction } from 'express';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // ✅ Set API Global Prefix
+  // ✅ Set API global prefix
   app.setGlobalPrefix('api'); // Ensures all API routes start with /api
 
   // ✅ Enable CORS
-  app.enableCors();
+  app.enableCors({
+    origin: '*', // Allow all origins
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    allowedHeaders: 'Content-Type, Authorization',
+  });
 
   // ✅ Serve frontend static files **but do NOT intercept API routes**
   const frontendPath = path.join(__dirname, '..', 'public');
@@ -20,7 +24,7 @@ async function bootstrap() {
 
   // ✅ Handle API requests **before serving the frontend UI**
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith('/api')) {
+    if (req.path.startsWith('/api/download')) {
       return next(); // Let API requests go through
     }
     res.sendFile(path.join(frontendPath, 'index.html'));

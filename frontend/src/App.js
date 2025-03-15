@@ -19,8 +19,8 @@ function App() {
             return;
         }
         setErrorMessage('');
-        // Use /api/ prefix to correctly route through the backend
-        let downloadUrl = `https://videodownloader-backend-8n9n.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
+        // Updated API route to include "/api/"
+        let downloadUrl = `http://localhost:3000/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
         if (startTime)
             downloadUrl += `&start=${timeToSeconds(startTime)}`;
         if (endTime)

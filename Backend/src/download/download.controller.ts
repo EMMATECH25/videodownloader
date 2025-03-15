@@ -12,6 +12,7 @@ const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 
+// ✅ Changed route from /download to /api/download
 @Controller('download')
 export class DownloadController {
   @Get()
@@ -39,7 +40,6 @@ export class DownloadController {
     }
 
     try {
-      // **Use a temporary directory instead of backend downloads folder**
       const tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'temp_'));
       console.log(`📂 Temporary Directory Created: ${tmpDir}`);
 
@@ -144,13 +144,11 @@ export class DownloadController {
           console.log(`✅ File successfully sent to user: ${finalVideoPath}`);
         }
 
-        // **Immediately delete processed video after sending**
         fs.unlink(finalVideoPath, (err) => {
           if (err) console.error('❌ Error deleting processed file:', err);
           else console.log(`🗑 Deleted processed file: ${finalVideoPath}`);
         });
 
-        // **Delete the temporary directory after everything is done**
         fs.unlink(originalVideoPath, (err) => {
           if (err) console.error('❌ Error deleting original file:', err);
           else console.log(`🗑 Deleted original file: ${originalVideoPath}`);
