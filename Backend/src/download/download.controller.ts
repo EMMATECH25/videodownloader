@@ -46,7 +46,6 @@ export class DownloadController {
         output: originalVideoPath,
         format: 'bv*+ba/b',
         mergeOutputFormat: 'mp4',
-        noMTime: true,
         hlsPreferFfmpeg: true,
       };
 
