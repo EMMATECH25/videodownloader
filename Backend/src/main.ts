@@ -30,7 +30,7 @@ async function bootstrap() {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 
-  const port = process.env.PORT || 10000;
+  const port = process.env.PORT || 3000;
   await app.listen(port);
   Logger.log(`🚀 Server running on http://localhost:${port}`);
 }

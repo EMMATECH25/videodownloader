@@ -20,7 +20,7 @@ function App() {
         }
         setErrorMessage('');
         // Updated API route to include "/api/"
-        let downloadUrl = `http://localhost:10000/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
+        let downloadUrl = `https://videodownloader-d963.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
         if (startTime)
             downloadUrl += `&start=${timeToSeconds(startTime)}`;
         if (endTime)
