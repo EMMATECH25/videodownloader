@@ -3,23 +3,27 @@ import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Enable CORS
+  // ✅ Set API Global Prefix
+  app.setGlobalPrefix('api'); // Ensures all API routes start with /api
+
+  // ✅ Enable CORS
   app.enableCors();
 
-  // Serve frontend build from backend/public
-  app.useStaticAssets(path.join(__dirname, '..', 'public'));
+  // ✅ Serve frontend static files **but do NOT intercept API routes**
+  const frontendPath = path.join(__dirname, '..', 'public');
+  app.useStaticAssets(frontendPath);
 
-  // **Set API Global Prefix**
-  app.setGlobalPrefix('api'); // All API routes will now be under `/api/`
-
-  // Redirect all other requests to frontend (index.html)
-  app.use('*', (req: Request, res: Response) => {
-    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  // ✅ Handle API requests **before serving the frontend UI**
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api')) {
+      return next(); // Let API requests go through
+    }
+    res.sendFile(path.join(frontendPath, 'index.html'));
   });
 
   const port = process.env.PORT || 3000;
@@ -28,5 +32,5 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  Logger.error('Error during bootstrap', error);
+  Logger.error('❌ Error during bootstrap:', error);
 });

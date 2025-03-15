@@ -3,3 +3,7 @@
 
 .facebook.com	TRUE	/	FALSE	0	c_user	100056036692197
 .facebook.com	TRUE	/	FALSE	0	xs	12%3An-o96l4jTytO4Q%3A2%3A1739509202%3A-1%3A3233%3A%3AAcUWeYLE5zEnIII4ujs4OhezwnvScQNAFBYPqWuL_r4
+.tiktok.com	TRUE	/	TRUE	1742851074	msToken	mwA3WrepvZODBdRsNjmdgUdDv1L4aRALfzaISr-WBqsDSmncXbIyXKD1qM51C2d5tWUrvoSZBwmjMaQBYb0I_n80zsy2-uihzuzlT0QuK1Oq8s5aLYZd0g==
+.tiktok.com	TRUE	/	TRUE	1757539074	tt_chain_token	gzha9gUS5ErFTv6taBlchA==
+.tiktok.com	TRUE	/	TRUE	0	tt_csrf_token	Q0m4MPaG-d_t9EOcFzt6fxuEnf6OImGN8q_0
+.tiktok.com	TRUE	/	FALSE	1772953167	ttwid	1%7CFURJbZ-87OoHUOJWNo6qOXgL0xvBv77BPursYiAtbBo%7C1741849167%7C1c271432de14f52ae5abcb9e7a7952f7c0d617355e3ef6545b903f46f06e1d2a

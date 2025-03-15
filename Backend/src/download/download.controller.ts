@@ -7,12 +7,12 @@ import * as ffmpeg from 'fluent-ffmpeg';
 
 const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
 const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
-const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg');
+const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg.exe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 
-@Controller('api/download') // ✅ Updated to match your global prefix
+@Controller('download')
 export class DownloadController {
   @Get()
   async downloadVideo(
@@ -25,7 +25,6 @@ export class DownloadController {
     console.log(`🌐 URL: ${url}`);
     console.log(`🕒 Received at: ${new Date().toISOString()}`);
 
-    // **Set No-Cache Headers**
     res.setHeader(
       'Cache-Control',
       'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -40,25 +39,19 @@ export class DownloadController {
     }
 
     try {
-      const outputPath = path.join(__dirname, '..', '..', 'downloads');
-
-      // **Clear previous video files**
-      fs.readdirSync(outputPath).forEach((file) => {
-        const filePath = path.join(outputPath, file);
-        fs.unlinkSync(filePath);
-        console.log(`🗑 Deleted old file: ${filePath}`);
-      });
+      // **Use a temporary directory instead of backend downloads folder**
+      const tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'temp_'));
+      console.log(`📂 Temporary Directory Created: ${tmpDir}`);
 
       const timestamp = Date.now();
-      const originalVideoPath = path.join(outputPath, `video_${timestamp}.mp4`);
+      const originalVideoPath = path.join(tmpDir, `video_${timestamp}.mp4`);
       const processedVideoPath = path.join(
-        outputPath,
+        tmpDir,
         `processed_${timestamp}.mp4`,
       );
 
-      console.log(`📂 Output Path: ${outputPath}`);
       console.log(
-        `📄 Generated Filenames: ${originalVideoPath}, ${processedVideoPath}`,
+        `📄 Filenames: \n - Original: ${originalVideoPath}\n - Processed: ${processedVideoPath}`,
       );
 
       let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
@@ -72,8 +65,8 @@ export class DownloadController {
 
       const downloadSuccess = await new Promise<boolean>((resolve) => {
         exec(ytDlpCommand, (error, stdout, stderr) => {
-          console.log('📄 yt-dlp Output:', stdout);
-          console.log('⚠ yt-dlp Errors:', stderr);
+          console.log('📄 yt-dlp Output:\n', stdout);
+          console.log('⚠ yt-dlp Errors:\n', stderr);
 
           if (error) {
             console.error('❌ yt-dlp Execution Error:', error.message);
@@ -110,7 +103,7 @@ export class DownloadController {
       const endTime = end ? parseInt(end, 10) : null;
 
       if (startTime !== null || endTime !== null) {
-        finalVideoPath = path.join(outputPath, `trimmed_${timestamp}.mp4`);
+        finalVideoPath = path.join(tmpDir, `trimmed_${timestamp}.mp4`);
         ffmpegCommand = ffmpegCommand.input(originalVideoPath);
         if (startTime !== null) {
           ffmpegCommand = ffmpegCommand.setStartTime(startTime);
@@ -144,20 +137,30 @@ export class DownloadController {
       }
 
       console.log(`📤 Sending file to user: ${finalVideoPath}`);
-      res.download(finalVideoPath, `downloaded_${timestamp}.mp4`);
+      res.download(finalVideoPath, `downloaded_${timestamp}.mp4`, (err) => {
+        if (err) {
+          console.error('❌ File download error:', err);
+        } else {
+          console.log(`✅ File successfully sent to user: ${finalVideoPath}`);
+        }
 
-      // **Step 5: Cleanup - Delete files after sending**
-      setTimeout(
-        () => {
-          [originalVideoPath, finalVideoPath].forEach((file) => {
-            if (fs.existsSync(file)) {
-              fs.unlinkSync(file);
-              console.log(`🗑 Deleted file: ${file}`);
-            }
-          });
-        },
-        5 * 60 * 1000,
-      );
+        // **Immediately delete processed video after sending**
+        fs.unlink(finalVideoPath, (err) => {
+          if (err) console.error('❌ Error deleting processed file:', err);
+          else console.log(`🗑 Deleted processed file: ${finalVideoPath}`);
+        });
+
+        // **Delete the temporary directory after everything is done**
+        fs.unlink(originalVideoPath, (err) => {
+          if (err) console.error('❌ Error deleting original file:', err);
+          else console.log(`🗑 Deleted original file: ${originalVideoPath}`);
+        });
+
+        fs.rmdir(tmpDir, { recursive: true }, (err) => {
+          if (err) console.error('❌ Error deleting temp directory:', err);
+          else console.log(`🗑 Deleted temp directory: ${tmpDir}`);
+        });
+      });
     } catch (error) {
       console.error(
         '❌ Error:',
