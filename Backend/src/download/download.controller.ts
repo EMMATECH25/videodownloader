@@ -1,18 +1,15 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ffmpeg from 'fluent-ffmpeg';
+import ytdlp from 'yt-dlp-exec'; // ✅ Corrected Import
 
-const BIN_PATH = path.join(__dirname, '..', '..', 'bin');
-const YT_DLP_PATH = path.join(BIN_PATH, 'yt-dlp');
-const FFMPEG_PATH = path.join(BIN_PATH, 'ffmpeg.exe');
 const COOKIES_PATH = path.join(__dirname, '..', '..', 'cookies.txt');
+const FFMPEG_PATH = path.join(__dirname, '..', '..', 'bin', 'ffmpeg.exe');
 
 ffmpeg.setFfmpegPath(FFMPEG_PATH);
 
-// ✅ Changed route from /download to /api/download
 @Controller('download')
 export class DownloadController {
   @Get()
@@ -26,60 +23,43 @@ export class DownloadController {
     console.log(`🌐 URL: ${url}`);
     console.log(`🕒 Received at: ${new Date().toISOString()}`);
 
-    res.setHeader(
-      'Cache-Control',
-      'no-store, no-cache, must-revalidate, proxy-revalidate',
-    );
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-
     if (!url) {
       console.log('❌ Error: No URL provided');
       return res.status(400).json({ error: 'Please provide a video URL!' });
     }
 
+    const tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'temp_'));
+    console.log(`📂 Temporary Directory Created: ${tmpDir}`);
+
+    const timestamp = Date.now();
+    const originalVideoPath = path.join(tmpDir, `video_${timestamp}.mp4`);
+    const processedVideoPath = path.join(tmpDir, `processed_${timestamp}.mp4`);
+
+    console.log(
+      `📄 Filenames: \n - Original: ${originalVideoPath}\n - Processed: ${processedVideoPath}`,
+    );
+
     try {
-      const tmpDir = fs.mkdtempSync(path.join(process.cwd(), 'temp_'));
-      console.log(`📂 Temporary Directory Created: ${tmpDir}`);
+      console.log(`🖥 Executing yt-dlp-exec...`);
 
-      const timestamp = Date.now();
-      const originalVideoPath = path.join(tmpDir, `video_${timestamp}.mp4`);
-      const processedVideoPath = path.join(
-        tmpDir,
-        `processed_${timestamp}.mp4`,
-      );
-
-      console.log(
-        `📄 Filenames: \n - Original: ${originalVideoPath}\n - Processed: ${processedVideoPath}`,
-      );
-
-      let ytDlpCommand = `${YT_DLP_PATH} -o "${originalVideoPath}" -f "bv*+ba/b" --merge-output-format mp4 --no-mtime --hls-prefer-ffmpeg "${url}"`;
+      const ytDlpArgs = {
+        output: originalVideoPath,
+        format: 'bv*+ba/b',
+        mergeOutputFormat: 'mp4',
+        noMTime: true,
+        hlsPreferFfmpeg: true,
+      };
 
       if (fs.existsSync(COOKIES_PATH)) {
         console.log('🔐 Using cookies:', COOKIES_PATH);
-        ytDlpCommand = `${YT_DLP_PATH} --cookies "${COOKIES_PATH}" -o "${originalVideoPath}" -f bestvideo+bestaudio/best --merge-output-format mp4 "${url}"`;
+        ytDlpArgs['cookies'] = COOKIES_PATH;
       }
 
-      console.log(`🖥 Executing yt-dlp command:\n   ${ytDlpCommand}`);
+      await ytdlp(url, ytDlpArgs); // ✅ Fixed yt-dlp-exec call
 
-      const downloadSuccess = await new Promise<boolean>((resolve) => {
-        exec(ytDlpCommand, (error, stdout, stderr) => {
-          console.log('📄 yt-dlp Output:\n', stdout);
-          console.log('⚠ yt-dlp Errors:\n', stderr);
+      console.log(`✅ yt-dlp Download Completed!`);
 
-          if (error) {
-            console.error('❌ yt-dlp Execution Error:', error.message);
-            resolve(false);
-            return;
-          }
-
-          console.log(`✅ yt-dlp Download Completed!`);
-          resolve(true);
-        });
-      });
-
-      if (!downloadSuccess || !fs.existsSync(originalVideoPath)) {
+      if (!fs.existsSync(originalVideoPath)) {
         console.error('❌ Download failed: File was not created.');
         return res
           .status(500)
