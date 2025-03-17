@@ -100,7 +100,15 @@ function App() {
 
       {statusMessage && <p className="text-green-600 mt-2">{statusMessage}</p>}
       {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
+
+      <div className="mt-6 p-4 bg-white shadow-lg rounded-lg w-full max-w-md">
+        <h2 className="text-lg font-semibold text-gray-700">How to Download</h2>
+        <p className="text-gray-600 mt-2">🔹 To download the full video, simply paste the URL and click "Download."</p>
+        <p className="text-gray-600 mt-2">🔹 To download a specific section, enter the start and end times in <strong>mm:ss</strong> format.</p>
+      </div>
+      
     </div>
+
   );
 }
 
