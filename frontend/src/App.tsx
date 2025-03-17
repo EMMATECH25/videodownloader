@@ -5,6 +5,8 @@ function App() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showPopup, setShowPopup] = useState(false);
+  const [downloadComplete, setDownloadComplete] = useState(false);
 
   // Convert mm:ss to total seconds
   const timeToSeconds = (time: string) => {
@@ -21,15 +23,18 @@ function App() {
       return;
     }
     setErrorMessage('');
+    setShowPopup(true);
+    setDownloadComplete(false);
 
-    // Updated API route to include "/api/"
     let downloadUrl = `https://videodownloader-d963.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
-
-
     if (startTime) downloadUrl += `&start=${timeToSeconds(startTime)}`;
     if (endTime) downloadUrl += `&end=${timeToSeconds(endTime)}`;
 
-    window.location.href = downloadUrl;
+    setTimeout(() => {
+      setShowPopup(false);
+      setDownloadComplete(true);
+      window.location.href = downloadUrl;
+    }, 2000);
   };
 
   return (
@@ -76,6 +81,14 @@ function App() {
       </button>
 
       {errorMessage && <p className="text-red-500 mt-2">{errorMessage}</p>}
+      {showPopup && <p className="text-blue-500 mt-2">🔄 Downloading... Please wait.</p>}
+      {downloadComplete && <p className="text-green-500 mt-2">✅ Download Complete!</p>}
+
+      <div className="mt-6 p-4 bg-white shadow-lg rounded-lg w-full max-w-md">
+        <h2 className="text-lg font-semibold text-gray-700">How to Download</h2>
+        <p className="text-gray-600 mt-2">🔹 To download the full video, simply paste the URL and click "Download."</p>
+        <p className="text-gray-600 mt-2">🔹 To download a specific section, enter the start and end times in <strong>mm:ss</strong> format.</p>
+      </div>
     </div>
   );
 }
