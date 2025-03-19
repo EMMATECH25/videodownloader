@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import ReactGA from "react-ga4";
+
+// Initialize Google Analytics
+const GA_MEASUREMENT_ID = "G-J84LVWRTMK"; // Replace with your actual GA ID
+ReactGA.initialize(GA_MEASUREMENT_ID);
 
 function App() {
   const [videoUrl, setVideoUrl] = useState('');
@@ -7,6 +12,10 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
+
+  useEffect(() => {
+    ReactGA.send({ hitType: "pageview", page: window.location.pathname });
+  }, []);
 
   const timeToSeconds = (time: string) => {
     const parts = time.split(':').map(Number);
@@ -25,6 +34,9 @@ function App() {
     setStatusMessage('Download in Progress...');
     setIsDownloading(true);
 
+    // Track download event
+    ReactGA.event({ category: "User Actions", action: "Download Started", label: "Download Button Clicked" });
+
     let downloadUrl = `https://videodownloader-d963.onrender.com/api/download?url=${encodeURIComponent(videoUrl)}&t=${Date.now()}`;
 
     if (startTime) downloadUrl += `&start=${timeToSeconds(startTime)}`;
@@ -36,7 +48,6 @@ function App() {
         throw new Error('Download failed. Please try again.');
       }
       
-      // Create an invisible link to trigger download
       const blob = await response.blob();
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -46,6 +57,9 @@ function App() {
       document.body.removeChild(link);
 
       setStatusMessage('Download Complete. Sending video to your system.');
+      
+      // Track successful download
+      ReactGA.event({ category: "User Actions", action: "Download Completed", label: "Video Successfully Downloaded" });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'An unknown error occurred.');
       setStatusMessage('');
@@ -56,7 +70,7 @@ function App() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-6">
-      <h1 className="text-3xl font-bold mb-4 text-blue-600">Video Downloader</h1>
+      <h1 className="text-3xl font-bold mb-4 text-blue-600">Facebook Video Downloader</h1>
       
       <input
         type="text"
@@ -108,7 +122,6 @@ function App() {
       </div>
       
     </div>
-
   );
 }
 
