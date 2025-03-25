@@ -37,7 +37,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "winston": "^3.17.0",
-    "yt-dlp-exec": "^1.0.2"
+    "yt-dlp-exec": "latest"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
