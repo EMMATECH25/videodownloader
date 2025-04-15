@@ -24,5 +24,5 @@ A user-friendly web application that allows users to download videos and reels f
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/EMMATECH25/facebook-video-downloader.git
-cd facebook-video-downloader
+git clone https://github.com/EMMATECH25/videodownloader.git
+cd videodownloader
