@@ -41,8 +41,6 @@ This project is open-source and available under the MIT License.
 🙋‍♂️ Author
 Nwoge Ifeanyi Emmanuel
 
-Portfolio Website
+[Portfolio Website](https://emmanuelnwogeportfolio.netlify.app)
 
-LinkedIn
-
-GitHub
+[Linkedin Profile](https://www.linkedin.com/in/nwoge-emmanuel-6b8a8221a/)
