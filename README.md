@@ -26,13 +26,15 @@ A user-friendly web application that allows users to download videos and reels f
 ```bash
 git clone https://github.com/EMMATECH25/videodownloader.git
 cd videodownloader
-
+```
 Run the App Locally
+```
 # Frontend (open index.html directly or use Live Server)
 # Backend
 cd backend
 npm install
 npm run start
+```
 📄 License
 This project is open-source and available under the MIT License.
 
